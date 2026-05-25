@@ -1,5 +1,11 @@
 # fzfsym
 
+## 0.2.0
+
+### Minor Changes
+
+- d356244: Include enclosing class/objects for properties/methods in output.
+
 ## 0.1.2
 
 ### Patch Changes
