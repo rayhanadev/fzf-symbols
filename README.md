@@ -31,7 +31,7 @@ Options:
 
 - `--limit`, `-l`: maximum results to print, default `50`.
 - `--format`, `-f`: `text` or `json`, default `text`.
-- `--kind`, `-k`: comma-separated symbol kinds to include.
+- `--kind`, `-k`: comma-separated symbol kinds to include. By default the CLI omits `constant` and `variable` matches to keep output focused on named API surfaces.
 - `--verbose`: print parser and file diagnostics.
 
 Text output is grouped by file and rendered as a compact code outline:

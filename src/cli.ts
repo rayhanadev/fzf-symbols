@@ -17,6 +17,18 @@ const sade = require("sade") as typeof import("sade");
 
 const VERSION = "0.1.0";
 const MAX_INTERFACE_PROPERTIES = 15;
+const DEFAULT_SYMBOL_KINDS: SymbolKind[] = [
+  "class",
+  "enum",
+  "enum-member",
+  "export",
+  "function",
+  "import",
+  "interface",
+  "method",
+  "property",
+  "type",
+];
 const SYMBOL_KINDS = new Set<SymbolKind>([
   "class",
   "constant",
@@ -425,7 +437,7 @@ function parseLimit(value: number | string | undefined): number {
 
 function parseSymbolKinds(value: string | undefined): SymbolKind[] | undefined {
   if (!value) {
-    return undefined;
+    return DEFAULT_SYMBOL_KINDS;
   }
 
   return value.split(",").map((kind) => {
