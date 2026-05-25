@@ -1,0 +1,74 @@
+{
+  "name": "fzfsym",
+  "version": "0.0.0",
+  "description": "Fast fuzzy symbol search for JavaScript and TypeScript codebases.",
+  "keywords": [
+    "ai",
+    "ast",
+    "code-search",
+    "fuzzy",
+    "javascript",
+    "oxc",
+    "symbols",
+    "typescript"
+  ],
+  "homepage": "https://github.com/rayhanadev/fzfsym#readme",
+  "bugs": {
+    "url": "https://github.com/rayhanadev/fzfsym/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rayhanadev/fzfsym.git"
+  },
+  "bin": {
+    "fzfsym": "./src/cli.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "bun src/cli.ts",
+    "start": "bun src/cli.ts",
+    "build": "tsdown",
+    "prepublishOnly": "bun run build",
+    "lint": "oxlint --type-aware",
+    "format": "oxfmt",
+    "typecheck": "tsgo --noEmit",
+    "version": "changeset version",
+    "release": "bun run build && changeset publish"
+  },
+  "dependencies": {
+    "oxc-parser": "^0.132.0",
+    "sade": "^1.8.1"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.31.0",
+    "@factory/eslint-plugin": "latest",
+    "@types/bun": "latest",
+    "@typescript/native-preview": "^7.0.0-dev.20260510.1",
+    "oxclippy": "^0.2.0",
+    "oxfmt": "latest",
+    "oxlint": "latest",
+    "oxlint-tsgolint": "latest",
+    "tsdown": "^0.22.0"
+  },
+  "engines": {
+    "bun": ">=1.3.0",
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}

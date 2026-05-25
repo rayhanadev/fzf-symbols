@@ -1,0 +1,457 @@
+#!/usr/bin/env bun
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import path from "node:path";
+
+import { searchSymbols } from "./index.ts";
+
+import type {
+  SearchSymbolsOptions,
+  SymbolKind,
+  SymbolScannerError,
+  SymbolSearchResult,
+} from "./index.ts";
+
+const require = createRequire(import.meta.url);
+const sade = require("sade") as typeof import("sade");
+
+const VERSION = "0.1.0";
+const MAX_INTERFACE_PROPERTIES = 15;
+const SYMBOL_KINDS = new Set<SymbolKind>([
+  "class",
+  "constant",
+  "enum",
+  "enum-member",
+  "export",
+  "function",
+  "import",
+  "interface",
+  "method",
+  "property",
+  "type",
+  "variable",
+]);
+
+interface CliOptions {
+  limit?: number | string;
+  format?: string;
+  kind?: string;
+  verbose?: boolean;
+}
+
+interface CliJsonOutput {
+  query: string;
+  root: string;
+  count: number;
+  results: CliJsonResult[];
+}
+
+interface CliJsonResult {
+  name: string;
+  kind: SymbolKind;
+  location: {
+    file: string;
+    line: number;
+    column: number;
+  };
+  signature?: string;
+  declarationStart?: number;
+  declarationEnd?: number;
+  signatureStart?: number;
+  signatureEnd?: number;
+  parameters?: SymbolSearchResult["parameters"];
+  returnType?: string;
+  container?: string;
+  snippet?: string;
+  score: number;
+  matches: number[];
+}
+
+interface FileOutline {
+  file: string;
+  language: string;
+  lines: string[];
+}
+
+export async function runCli(argv = process.argv): Promise<void> {
+  sade("fzfsym <query> [root]", true)
+    .version(VERSION)
+    .describe("Find code symbols by fuzzy name matching.")
+    .option("-l, --limit", "Maximum number of results to print.", 50)
+    .option("-f, --format", "Output format: text or json.", "text")
+    .option("-k, --kind", "Comma-separated symbol kinds to include.")
+    .option("--verbose", "Print parser and file diagnostics.", false)
+    .example("Button src")
+    .example("btn --kind function,class --limit 20 --format json")
+    .action(async (query: string, root: string | undefined, options: CliOptions) => {
+      await runSearch(query, root, options);
+    })
+    .parse(argv);
+}
+
+async function runSearch(
+  query: string,
+  root: string | undefined,
+  options: CliOptions,
+): Promise<void> {
+  const format = options.format ?? "text";
+
+  if (format !== "text" && format !== "json") {
+    throw new Error(`Unsupported format "${format}". Use "text" or "json".`);
+  }
+
+  const searchOptions: SearchSymbolsOptions = {
+    root: root ?? ".",
+    cwd: process.cwd(),
+    limit: parseLimit(options.limit),
+    symbolKinds: parseSymbolKinds(options.kind),
+    onError: createErrorReporter(Boolean(options.verbose)),
+  };
+
+  const results = await searchSymbols(query, searchOptions);
+
+  if (format === "json") {
+    console.log(
+      JSON.stringify(createJsonOutput(query, searchOptions.root ?? ".", results), null, 2),
+    );
+    return;
+  }
+
+  await printTextResults(results);
+}
+
+async function printTextResults(results: readonly SymbolSearchResult[]): Promise<void> {
+  const outlines = await createFileOutlines(results);
+
+  for (const [index, outline] of outlines.entries()) {
+    if (index > 0) {
+      console.log("");
+    }
+
+    console.log(formatFile(outline.file));
+    console.log(`\`\`\`${outline.language}`);
+    console.log(outline.lines.join("\n"));
+    console.log("```");
+  }
+}
+
+function createJsonOutput(
+  query: string,
+  root: string,
+  results: readonly SymbolSearchResult[],
+): CliJsonOutput {
+  return {
+    query,
+    root,
+    count: results.length,
+    results: results.map((result) => ({
+      name: result.name,
+      kind: result.kind,
+      location: {
+        file: formatFile(result.file),
+        line: result.line ?? 1,
+        column: result.column ?? 1,
+      },
+      signature: result.signature,
+      declarationStart: result.declarationStart,
+      declarationEnd: result.declarationEnd,
+      signatureStart: result.signatureStart,
+      signatureEnd: result.signatureEnd,
+      parameters: result.parameters,
+      returnType: result.returnType,
+      container: result.container,
+      snippet: result.snippet,
+      score: Number(result.score.toFixed(4)),
+      matches: result.matches,
+    })),
+  };
+}
+
+function formatFile(file: string): string {
+  const relativePath = path.relative(process.cwd(), file);
+  return relativePath.length > 0 && !relativePath.startsWith("..") ? relativePath : file;
+}
+
+async function createFileOutlines(results: readonly SymbolSearchResult[]): Promise<FileOutline[]> {
+  const groupedResults = groupResultsByFile(results);
+  const outlines: FileOutline[] = [];
+
+  for (const [file, fileResults] of groupedResults) {
+    const source = await readFile(file, "utf8");
+    const lines = source.split(/\r?\n/);
+    const lineStarts = createLineStarts(source);
+
+    outlines.push({
+      file,
+      language: getMarkdownLanguage(file),
+      lines: fileResults.flatMap((result, index) => [
+        ...(index > 0 ? [""] : []),
+        ...createOutlineLines(result, lines, lineStarts),
+      ]),
+    });
+  }
+
+  return outlines;
+}
+
+function groupResultsByFile(
+  results: readonly SymbolSearchResult[],
+): Map<string, SymbolSearchResult[]> {
+  const groupedResults = new Map<string, SymbolSearchResult[]>();
+
+  for (const result of results) {
+    const group = groupedResults.get(result.file);
+
+    if (group) {
+      group.push(result);
+    } else {
+      groupedResults.set(result.file, [result]);
+    }
+  }
+
+  for (const group of groupedResults.values()) {
+    group.sort((left, right) => (left.line ?? 0) - (right.line ?? 0));
+  }
+
+  return groupedResults;
+}
+
+function createOutlineLines(
+  result: SymbolSearchResult,
+  lines: readonly string[],
+  lineStarts: readonly number[],
+): string[] {
+  const startOffset = result.declarationStart ?? result.start;
+  const endOffset = result.declarationEnd ?? result.end;
+  const startLine = offsetToLine(lineStarts, startOffset);
+  const signatureEndLine = offsetToLine(
+    lineStarts,
+    Math.max((result.signatureEnd ?? startOffset) - 1, startOffset),
+  );
+  const endLine = Math.max(
+    startLine,
+    offsetToLine(lineStarts, Math.max(endOffset - 1, startOffset)),
+  );
+  const signatureLines = createSignatureLines(startLine, signatureEndLine, lines);
+
+  if (endLine <= startLine) {
+    return signatureLines;
+  }
+
+  const endText = findLastNonEmptyLine(lines, startLine, endLine);
+
+  if (!endText) {
+    return signatureLines;
+  }
+
+  if (result.kind === "interface") {
+    return createInterfaceOutlineLines(signatureLines, signatureEndLine, endText, lines);
+  }
+
+  return [
+    ...signatureLines,
+    formatCodeLine(
+      signatureEndLine + 1,
+      `${leadingWhitespace(lines[signatureEndLine - 1] ?? "")}  ...`,
+    ),
+    formatCodeLine(endText.line, endText.text),
+  ];
+}
+
+function createInterfaceOutlineLines(
+  signatureLines: readonly string[],
+  signatureEndLine: number,
+  endText: { line: number; text: string },
+  lines: readonly string[],
+): string[] {
+  const propertyLines = collectInterfacePropertyLines(
+    lines,
+    signatureEndLine + 1,
+    endText.line - 1,
+  );
+
+  if (propertyLines.length === 0) {
+    return [...signatureLines, formatCodeLine(endText.line, endText.text)];
+  }
+
+  const visibleProperties = propertyLines.slice(0, MAX_INTERFACE_PROPERTIES);
+  const hiddenCount = propertyLines.length - visibleProperties.length;
+  const summaryIndent = leadingWhitespace(visibleProperties[0]?.text ?? "  ");
+
+  return [
+    ...signatureLines,
+    ...visibleProperties.map((property) => formatCodeLine(property.line, property.text)),
+    ...(hiddenCount > 0
+      ? [formatSyntheticLine(`${summaryIndent}(...and ${hiddenCount} more properties)`)]
+      : []),
+    formatCodeLine(endText.line, endText.text),
+  ];
+}
+
+function collectInterfacePropertyLines(
+  lines: readonly string[],
+  startLine: number,
+  endLine: number,
+): Array<{ line: number; text: string }> {
+  const properties: Array<{ line: number; text: string }> = [];
+
+  for (let line = startLine; line <= endLine; line += 1) {
+    const text = lines[line - 1];
+
+    if (text?.trim()) {
+      properties.push({ line, text });
+    }
+  }
+
+  return properties;
+}
+
+function createSignatureLines(
+  startLine: number,
+  signatureEndLine: number,
+  lines: readonly string[],
+): string[] {
+  const output: string[] = [];
+
+  for (let line = startLine; line <= signatureEndLine; line += 1) {
+    output.push(formatCodeLine(line, lines[line - 1] ?? ""));
+  }
+
+  return output;
+}
+
+function findLastNonEmptyLine(
+  lines: readonly string[],
+  startLine: number,
+  endLine: number,
+): { line: number; text: string } | undefined {
+  for (let line = endLine; line > startLine; line -= 1) {
+    const text = lines[line - 1];
+
+    if (text?.trim()) {
+      return { line, text };
+    }
+  }
+
+  return undefined;
+}
+
+function formatCodeLine(line: number, text: string): string {
+  return `${String(line).padStart(4, " ")} | ${truncateLine(text)}`;
+}
+
+function formatSyntheticLine(text: string): string {
+  return `     | ${truncateLine(text)}`;
+}
+
+function truncateLine(text: string): string {
+  const maxLength = 120;
+  const normalized = text.replace(/\s+$/g, "");
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+function leadingWhitespace(text: string): string {
+  return text.match(/^\s*/)?.[0] ?? "";
+}
+
+function getMarkdownLanguage(file: string): string {
+  if (file.endsWith(".tsx")) {
+    return "tsx";
+  }
+
+  if (file.endsWith(".ts") || file.endsWith(".mts") || file.endsWith(".cts")) {
+    return "ts";
+  }
+
+  if (file.endsWith(".jsx")) {
+    return "jsx";
+  }
+
+  return "js";
+}
+
+function createLineStarts(source: string): number[] {
+  const starts = [0];
+
+  for (let index = 0; index < source.length; index += 1) {
+    if (source.charCodeAt(index) === 10) {
+      starts.push(index + 1);
+    }
+  }
+
+  return starts;
+}
+
+function offsetToLine(lineStarts: readonly number[], offset: number): number {
+  let low = 0;
+  let high = lineStarts.length - 1;
+
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const lineStart = lineStarts[middle] ?? 0;
+
+    if (lineStart <= offset) {
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  return Math.max(0, high) + 1;
+}
+
+function parseLimit(value: number | string | undefined): number {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (!value) {
+    return 50;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`Invalid limit "${value}".`);
+  }
+
+  return parsed;
+}
+
+function parseSymbolKinds(value: string | undefined): SymbolKind[] | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return value.split(",").map((kind) => {
+    const normalized = kind.trim() as SymbolKind;
+
+    if (!SYMBOL_KINDS.has(normalized)) {
+      throw new Error(`Unsupported symbol kind "${kind}".`);
+    }
+
+    return normalized;
+  });
+}
+
+function createErrorReporter(verbose: boolean): (error: SymbolScannerError) => void {
+  return (error) => {
+    if (!verbose) {
+      return;
+    }
+
+    console.error(`[${error.kind}] ${error.file}: ${error.message}`);
+  };
+}
+
+if (import.meta.main) {
+  runCli().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}
