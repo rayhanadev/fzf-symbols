@@ -1,0 +1,19 @@
+README.md
+  s_15c165288cd81a::t_0c1fa6185d65b8 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "c6bc0b66ac1e223f510a2710a7882145ff12ae79",
+  "prompts": {},
+  "sessions": {
+    "s_15c165288cd81a": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "b1ff5cb3-17d0-4ae2-916a-05573fa7f1ac",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Rayhan Noufal Arayilakath <me@rayhanadev.com>"
+    }
+  }
+}
