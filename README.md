@@ -50,6 +50,23 @@ src/button.tsx
 ```
 ````
 
+Method and property matches include their enclosing class or object context:
+
+````text
+src/button.tsx
+```tsx
+  10 | export class ButtonController {
+     |   ...
+  14 |   handleClick(): void {}
+  15 | }
+
+  18 | const buttonHelpers = {
+     |   ...
+  22 |   defaultSize: ButtonSize.Small,
+  23 | };
+```
+````
+
 Large interfaces show the first 15 properties and then summarize the rest:
 
 ````text

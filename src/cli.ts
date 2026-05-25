@@ -82,6 +82,16 @@ interface FileOutline {
   lines: string[];
 }
 
+interface SourceLine {
+  line: number;
+  text: string;
+}
+
+interface EnclosingBlock {
+  open: SourceLine;
+  close?: SourceLine;
+}
+
 export async function runCli(argv = process.argv): Promise<void> {
   sade("fzfsym <query> [root]", true)
     .version(VERSION)
@@ -244,19 +254,46 @@ function createOutlineLines(
   const signatureLines = createSignatureLines(startLine, signatureEndLine, lines);
 
   if (endLine <= startLine) {
-    return signatureLines;
+    return (
+      createMemberOutlineIfNeeded(result, signatureLines, startLine, endLine, lines) ??
+      signatureLines
+    );
   }
 
   const endText = findLastNonEmptyLine(lines, startLine, endLine);
 
   if (!endText) {
-    return signatureLines;
+    return (
+      createMemberOutlineIfNeeded(result, signatureLines, startLine, endLine, lines) ??
+      signatureLines
+    );
+  }
+
+  const memberOutline = createMemberOutlineIfNeeded(
+    result,
+    createDeclarationOutlineLines(signatureLines, signatureEndLine, endText, lines),
+    startLine,
+    endText.line,
+    lines,
+  );
+
+  if (memberOutline) {
+    return memberOutline;
   }
 
   if (result.kind === "interface") {
     return createInterfaceOutlineLines(signatureLines, signatureEndLine, endText, lines);
   }
 
+  return createDeclarationOutlineLines(signatureLines, signatureEndLine, endText, lines);
+}
+
+function createDeclarationOutlineLines(
+  signatureLines: readonly string[],
+  signatureEndLine: number,
+  endText: SourceLine,
+  lines: readonly string[],
+): string[] {
   return [
     ...signatureLines,
     formatCodeLine(
@@ -265,6 +302,43 @@ function createOutlineLines(
     ),
     formatCodeLine(endText.line, endText.text),
   ];
+}
+
+function createMemberOutlineIfNeeded(
+  result: SymbolSearchResult,
+  memberLines: readonly string[],
+  memberStartLine: number,
+  memberEndLine: number,
+  lines: readonly string[],
+): string[] | undefined {
+  if (result.kind !== "method" && result.kind !== "property") {
+    return undefined;
+  }
+
+  const enclosingBlock = findEnclosingBlock(lines, memberStartLine);
+
+  if (!enclosingBlock) {
+    return undefined;
+  }
+
+  const bodyIndent = `${leadingWhitespace(enclosingBlock.open.text)}  `;
+  const output = [formatCodeLine(enclosingBlock.open.line, enclosingBlock.open.text)];
+
+  if (enclosingBlock.open.line + 1 < memberStartLine) {
+    output.push(formatSyntheticLine(`${bodyIndent}...`));
+  }
+
+  output.push(...memberLines);
+
+  if (enclosingBlock.close && memberEndLine + 1 < enclosingBlock.close.line) {
+    output.push(formatSyntheticLine(`${bodyIndent}...`));
+  }
+
+  if (enclosingBlock.close && enclosingBlock.close.line > memberEndLine) {
+    output.push(formatCodeLine(enclosingBlock.close.line, enclosingBlock.close.text));
+  }
+
+  return output;
 }
 
 function createInterfaceOutlineLines(
@@ -295,6 +369,63 @@ function createInterfaceOutlineLines(
       : []),
     formatCodeLine(endText.line, endText.text),
   ];
+}
+
+function findEnclosingBlock(
+  lines: readonly string[],
+  memberStartLine: number,
+): EnclosingBlock | undefined {
+  const stack: SourceLine[] = [];
+
+  for (let line = 1; line < memberStartLine; line += 1) {
+    updateBraceStack(stack, line, lines[line - 1] ?? "");
+  }
+
+  const open = stack.at(-1);
+
+  if (!open) {
+    return undefined;
+  }
+
+  return {
+    open,
+    close: findClosingBraceLine(lines, open.line),
+  };
+}
+
+function updateBraceStack(stack: SourceLine[], line: number, text: string): void {
+  for (const character of text) {
+    if (character === "{") {
+      stack.push({ line, text });
+      continue;
+    }
+
+    if (character === "}") {
+      stack.pop();
+    }
+  }
+}
+
+function findClosingBraceLine(lines: readonly string[], openLine: number): SourceLine | undefined {
+  let depth = 0;
+
+  for (let line = openLine; line <= lines.length; line += 1) {
+    const text = lines[line - 1] ?? "";
+
+    for (const character of text) {
+      if (character === "{") {
+        depth += 1;
+      } else if (character === "}") {
+        depth -= 1;
+
+        if (depth === 0) {
+          return { line, text };
+        }
+      }
+    }
+  }
+
+  return undefined;
 }
 
 function collectInterfacePropertyLines(
