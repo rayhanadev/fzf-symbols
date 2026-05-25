@@ -30,8 +30,8 @@ fzfsym button src --format json
 Options:
 
 - `--limit`, `-l`: maximum results to print, default `50`.
-- `--format`, `-f`: `text` or `json`, default `text`.
-- `--kind`, `-k`: comma-separated symbol kinds to include. By default the CLI omits `import`, `constant`, and `variable` matches to keep output focused on named API surfaces.
+- `--format`, `-f`: output format. Options: `text`, `json`. Default: `text`.
+- `--kind`, `-k`: comma-separated symbol kinds to include. Default: `class`, `enum`, `function`, `interface`, `method`, `property`, `type`. Options: `class`, `constant`, `enum`, `enum-member`, `export`, `function`, `import`, `interface`, `method`, `property`, `type`, `variable`.
 - `--verbose`: print parser and file diagnostics.
 
 Text output is grouped by file and rendered as a compact code outline:

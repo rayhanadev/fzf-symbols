@@ -40,6 +40,8 @@ const SYMBOL_KINDS = new Set<SymbolKind>([
   "type",
   "variable",
 ]);
+const DEFAULT_KIND_HELP = DEFAULT_SYMBOL_KINDS.join(",");
+const ALL_KIND_HELP = Array.from(SYMBOL_KINDS).join(",");
 
 interface CliOptions {
   limit?: number | string;
@@ -97,13 +99,21 @@ export async function runCli(argv = process.argv): Promise<void> {
     .version(VERSION)
     .describe("Find code symbols by fuzzy name matching.")
     .option("-l, --limit", "Maximum number of results to print.", 50)
-    .option("-f, --format", "Output format: text or json.", "text")
-    .option("-k, --kind", "Comma-separated symbol kinds to include.")
+    .option("-f, --format", "Output format. Options: text,json.", "text")
+    .option(
+      "-k, --kind",
+      `Comma-separated symbol kinds. Default: ${DEFAULT_KIND_HELP}. Options: ${ALL_KIND_HELP}.`,
+    )
     .option("--verbose", "Print parser and file diagnostics.", false)
     .example("Button src")
     .example("btn --kind function,class --limit 20 --format json")
     .action(async (query: string, root: string | undefined, options: CliOptions) => {
-      await runSearch(query, root, options);
+      try {
+        await runSearch(query, root, options);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 1;
+      }
     })
     .parse(argv);
 }
@@ -572,7 +582,7 @@ function parseSymbolKinds(value: string | undefined): SymbolKind[] | undefined {
     const normalized = kind.trim() as SymbolKind;
 
     if (!SYMBOL_KINDS.has(normalized)) {
-      throw new Error(`Unsupported symbol kind "${kind}".`);
+      throw new Error(`Unsupported symbol kind "${kind}". Options: ${ALL_KIND_HELP}.`);
     }
 
     return normalized;
