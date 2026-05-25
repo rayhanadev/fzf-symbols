@@ -20,10 +20,7 @@ const MAX_INTERFACE_PROPERTIES = 15;
 const DEFAULT_SYMBOL_KINDS: SymbolKind[] = [
   "class",
   "enum",
-  "enum-member",
-  "export",
   "function",
-  "import",
   "interface",
   "method",
   "property",
