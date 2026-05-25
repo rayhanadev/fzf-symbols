@@ -1,6 +1,6 @@
 {
   "name": "fzfsym",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Fast fuzzy symbol search for JavaScript and TypeScript codebases.",
   "keywords": [
     "ai",

@@ -1,5 +1,0 @@
----
-"fzfsym": minor
----
-
-Initial commit
