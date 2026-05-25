@@ -1,5 +1,11 @@
 # fzfsym
 
+## 0.2.1
+
+### Patch Changes
+
+- a58aa7e: Show options for `kind` in help text
+
 ## 0.2.0
 
 ### Minor Changes
