@@ -1,0 +1,19 @@
+.changeset/bright-lamps-smile.md
+  s_e046ecef22c2a1::t_7bab2763442f3f 5-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "e34688743efbc6640ee7afec7c714cd82a88a854",
+  "prompts": {},
+  "sessions": {
+    "s_e046ecef22c2a1": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "65de651d-a75d-4904-83c8-f448b56b2900",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Rayhan Noufal Arayilakath <me@rayhanadev.com>"
+    }
+  }
+}
