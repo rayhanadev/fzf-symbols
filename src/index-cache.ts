@@ -10,6 +10,21 @@ import type { ScanSymbolsOptions, SymbolRecord, SymbolScannerError } from "./typ
 const INDEX_SCHEMA_VERSION = 1;
 const EXTRACTOR_VERSION = "symbols-v1";
 const INDEX_FILENAME = "symbols.json";
+const SYMBOL_KINDS = new Set<SymbolRecord["kind"]>([
+  "class",
+  "constant",
+  "enum",
+  "enum-member",
+  "export",
+  "function",
+  "import",
+  "interface",
+  "method",
+  "property",
+  "type",
+  "variable",
+]);
+const ERROR_KINDS = new Set<SymbolScannerError["kind"]>(["file-read", "parse", "walk"]);
 
 interface CachedFile {
   hash: string;
@@ -55,6 +70,7 @@ export async function scanSymbolsWithIndex(
   const currentRelativePaths = new Set(
     files.map((file) => toIndexPath(path.relative(projectRoot, file))),
   );
+  const updatedRelativePaths = new Set<string>();
   let indexChanged = false;
 
   for (const file of files) {
@@ -81,13 +97,18 @@ export async function scanSymbolsWithIndex(
     }
 
     index.files[relativePath] = indexed;
+    updatedRelativePaths.add(relativePath);
     indexChanged = true;
     symbols.push(...filterSymbols(indexed.symbols, allowedKinds));
   }
 
   if (indexChanged || hasStaleEntries(index, currentRelativePaths)) {
     index.updatedAt = new Date().toISOString();
-    await writeProjectIndex(location, index, currentRelativePaths);
+    try {
+      await writeProjectIndex(location, index, currentRelativePaths, updatedRelativePaths);
+    } catch {
+      // The index is a cache; failed writes should not fail the scan.
+    }
   }
 
   return symbols;
@@ -266,6 +287,7 @@ async function writeProjectIndex(
   location: ProjectIndexLocation,
   index: ProjectIndex,
   currentRelativePaths: ReadonlySet<string>,
+  updatedRelativePaths: ReadonlySet<string>,
 ): Promise<void> {
   await mkdir(location.directory, { recursive: true });
 
@@ -273,7 +295,9 @@ async function writeProjectIndex(
   const files: Record<string, CachedFile> = {};
 
   for (const relativePath of currentRelativePaths) {
-    const cached = index.files[relativePath] ?? latestIndex.files[relativePath];
+    const cached = updatedRelativePaths.has(relativePath)
+      ? index.files[relativePath]
+      : (latestIndex.files[relativePath] ?? index.files[relativePath]);
 
     if (cached) {
       files[relativePath] = cached;
@@ -321,18 +345,38 @@ function isCachedFile(value: unknown): value is CachedFile {
     typeof value.mtimeMs === "number" &&
     typeof value.size === "number" &&
     Array.isArray(value.symbols) &&
+    value.symbols.every(isSymbolRecord) &&
     (value.errors === undefined ||
       (Array.isArray(value.errors) && value.errors.every(isCachedSymbolScannerError)))
+  );
+}
+
+function isSymbolRecord(value: unknown): value is SymbolRecord {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    isSymbolKind(value.kind) &&
+    typeof value.file === "string" &&
+    typeof value.start === "number" &&
+    typeof value.end === "number"
   );
 }
 
 function isCachedSymbolScannerError(value: unknown): value is CachedSymbolScannerError {
   return (
     isRecord(value) &&
-    typeof value.kind === "string" &&
+    isErrorKind(value.kind) &&
     typeof value.file === "string" &&
     typeof value.message === "string"
   );
+}
+
+function isSymbolKind(value: unknown): value is SymbolRecord["kind"] {
+  return typeof value === "string" && SYMBOL_KINDS.has(value as SymbolRecord["kind"]);
+}
+
+function isErrorKind(value: unknown): value is SymbolScannerError["kind"] {
+  return typeof value === "string" && ERROR_KINDS.has(value as SymbolScannerError["kind"]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -340,10 +384,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function createProjectSlug(projectRoot: string): string {
-  const normalized = path.resolve(projectRoot).split(path.sep).filter(Boolean).join("-");
+  const resolvedProjectRoot = path.resolve(projectRoot);
+  const normalized = resolvedProjectRoot.split(path.sep).filter(Boolean).join("-");
   const safe = normalized.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-");
+  const pathHash = createHash("sha256").update(resolvedProjectRoot).digest("hex").slice(0, 8);
 
-  return safe || "root";
+  return `${safe || "root"}-${pathHash}`;
 }
 
 function toIndexPath(file: string): string {

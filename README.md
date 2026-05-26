@@ -113,7 +113,7 @@ src/button.tsx
 
 ## Indexing
 
-`truffler` persists a per-project symbol index under your home directory (`os.homedir()`), at `.truffler/projects/<path-to-project-with-dashes>/symbols.json`.
+`truffler` persists a per-project symbol index under your home directory (`os.homedir()`), at `.truffler/projects/<path-to-project-with-dashes>-<path-hash>/symbols.json`.
 
 Each scan still discovers matching files, but unchanged files reuse cached `SymbolRecord` data instead of being read and parsed with `oxc-parser`. When file metadata changes, `truffler` hashes the file content; if the hash matches the cached entry, it refreshes metadata without reparsing. Only files with changed content are reindexed.
 
