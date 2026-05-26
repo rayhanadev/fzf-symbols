@@ -1,0 +1,34 @@
+src/index-cache.ts
+  s_4fd2addc704c57::t_d00b1297dc307f 460
+  s_4fd2addc704c57::t_8a1fa9e84e893c 75,82,95-99
+  s_4fd2addc704c57::t_ac20328eb1e88d 9
+  s_4fd2addc704c57::t_28eb4498c76a26 168,177,179-181,193,199,201-203,218
+  s_4fd2addc704c57::t_81038d12fbb111 6
+src/cli.ts
+  s_4fd2addc704c57::t_81038d12fbb111 8
+src/symbols.ts
+  s_4fd2addc704c57::t_9bca4f8bb51b82 3-4,114,119-121,123-127,143-147
+src/index.ts
+  s_4fd2addc704c57::t_20787a156ac92f 2-9
+src/files.ts
+  s_4fd2addc704c57::t_1fe95d2221e2ee 4-5,196
+src/errors.ts
+  s_4fd2addc704c57::t_99148f328b4c8e 1,3-11,13-21,23-31,33-41,43-52
+  s_4fd2addc704c57::t_d375e5b8513c92 2,12,22,32,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "22e745ceddb5159ab61fb9030bab91f07e89a3da",
+  "prompts": {},
+  "sessions": {
+    "s_4fd2addc704c57": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "b75bc54b-5742-40b3-bae1-75e7b6ed7765",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Rayhan Noufal Arayilakath <me@rayhanadev.com>"
+    }
+  }
+}
