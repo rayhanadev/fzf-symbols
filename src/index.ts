@@ -1,5 +1,6 @@
 export { discoverFiles } from "./files.ts";
 export { rankSymbols, scoreFuzzy } from "./fuzzy.ts";
+export { getProjectIndexDirectory } from "./index-cache.ts";
 export { scanSymbols, searchSymbols } from "./scanner.ts";
 export { extractSymbolsFromSource } from "./symbols.ts";
 
