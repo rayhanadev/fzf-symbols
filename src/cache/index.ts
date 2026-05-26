@@ -1,50 +1,20 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
-import { type as arkType } from "arktype";
+import { SymbolFileReadError, SymbolIndexWriteError, SymbolScanAbortedError } from "../errors.ts";
+import { extractSymbolsFromSource } from "../symbols.ts";
+import type { ScanSymbolsOptions, SymbolRecord } from "../types.ts";
+import { INDEX_FILENAME } from "./constants.ts";
+import { getProjectIndexDirectory, getProjectIndexLocation, toIndexPath } from "./paths.ts";
+import { createEmptyV1ProjectIndex, parseV1ProjectIndex } from "./schema.ts";
+import type { ProjectIndexLocation, V1CachedFile, V1ProjectIndex } from "./types.ts";
 
-import { SymbolFileReadError, SymbolIndexWriteError, SymbolScanAbortedError } from "./errors.ts";
-import { extractSymbolsFromSource } from "./symbols.ts";
-
-import type { ScanSymbolsOptions, SymbolRecord } from "./types.ts";
-
-const V1_INDEX_SCHEMA_VERSION = 1;
-const V1_EXTRACTOR_VERSION = "symbols-v1";
-const INDEX_FILENAME = "symbols.json";
-const MAX_PROJECT_SLUG_PREFIX_LENGTH = 96;
-const V1ProjectIndexSchema = arkType({
-  schemaVersion: "number",
-  extractorVersion: "string",
-  projectRoot: "string",
-  updatedAt: "string",
-  files: "object",
-});
-
-interface V1CachedFile {
-  hash: string;
-  mtimeMs: number;
-  size: number;
-  symbols: SymbolRecord[];
-}
-
-interface V1ProjectIndex {
-  schemaVersion: number;
-  extractorVersion: string;
-  projectRoot: string;
-  updatedAt: string;
-  files: Record<string, V1CachedFile>;
-}
+export { getProjectIndexDirectory };
 
 interface FileState {
   mtimeMs: number;
   size: number;
-}
-
-interface ProjectIndexLocation {
-  directory: string;
-  file: string;
 }
 
 export async function scanSymbolsWithIndex(
@@ -98,24 +68,6 @@ export async function scanSymbolsWithIndex(
   return symbols;
 }
 
-export function getProjectIndexDirectory(projectRoot: string): string {
-  return path.join(getTrufflerConfigRoot(), "projects", createProjectSlug(projectRoot));
-}
-
-function getTrufflerConfigRoot(): string {
-  try {
-    const home = homedir();
-
-    if (home) {
-      return path.join(home, ".truffler");
-    }
-  } catch {
-    // Restricted runtimes can make home directory resolution unavailable.
-  }
-
-  return path.join(tmpdir(), ".truffler");
-}
-
 async function getProjectRoot(options: ScanSymbolsOptions): Promise<string> {
   const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
   const root = path.resolve(cwd, options.root ?? ".");
@@ -128,33 +80,13 @@ async function getProjectRoot(options: ScanSymbolsOptions): Promise<string> {
   }
 }
 
-function getProjectIndexLocation(projectRoot: string): ProjectIndexLocation {
-  const directory = getProjectIndexDirectory(projectRoot);
-
-  return {
-    directory,
-    file: path.join(directory, INDEX_FILENAME),
-  };
-}
-
 async function readProjectIndex(file: string, projectRoot: string): Promise<V1ProjectIndex> {
   try {
     const raw = await readFile(file, "utf8");
-    const parsed = V1ProjectIndexSchema(JSON.parse(raw));
+    const parsed = parseV1ProjectIndex(JSON.parse(raw), projectRoot);
 
-    if (
-      !(parsed instanceof arkType.errors) &&
-      parsed.schemaVersion === V1_INDEX_SCHEMA_VERSION &&
-      parsed.extractorVersion === V1_EXTRACTOR_VERSION &&
-      parsed.projectRoot === projectRoot
-    ) {
-      return {
-        schemaVersion: V1_INDEX_SCHEMA_VERSION,
-        extractorVersion: V1_EXTRACTOR_VERSION,
-        projectRoot,
-        updatedAt: parsed.updatedAt,
-        files: Array.isArray(parsed.files) ? {} : (parsed.files as Record<string, V1CachedFile>),
-      };
+    if (parsed) {
+      return parsed;
     }
   } catch {
     // A missing or unreadable index should never block a symbol scan.
@@ -162,16 +94,6 @@ async function readProjectIndex(file: string, projectRoot: string): Promise<V1Pr
 
   // No migrations exist yet; incompatible cache versions are rebuilt from source.
   return createEmptyV1ProjectIndex(projectRoot);
-}
-
-function createEmptyV1ProjectIndex(projectRoot: string): V1ProjectIndex {
-  return {
-    schemaVersion: V1_INDEX_SCHEMA_VERSION,
-    extractorVersion: V1_EXTRACTOR_VERSION,
-    projectRoot,
-    updatedAt: new Date().toISOString(),
-    files: {},
-  };
 }
 
 async function readFileState(file: string): Promise<FileState> {
@@ -215,22 +137,18 @@ async function indexFile(
   const hash = createContentHash(source);
 
   if (cached?.hash === hash) {
-    const refreshed = {
+    return {
       ...cached,
       mtimeMs: state.mtimeMs,
       size: state.size,
     };
-
-    return refreshed;
   }
-
-  const symbols = extractSymbolsFromSource(file, source);
 
   return {
     hash,
     mtimeMs: state.mtimeMs,
     size: state.size,
-    symbols,
+    symbols: extractSymbolsFromSource(file, source),
   };
 }
 
@@ -296,22 +214,6 @@ function hasStaleEntries(
   currentRelativePaths: ReadonlySet<string>,
 ): boolean {
   return Object.keys(index.files).some((relativePath) => !currentRelativePaths.has(relativePath));
-}
-
-function createProjectSlug(projectRoot: string): string {
-  const resolvedProjectRoot = path.resolve(projectRoot);
-  const normalized = resolvedProjectRoot.split(path.sep).filter(Boolean).join("-");
-  const safe = normalized
-    .replace(/[^a-zA-Z0-9._-]/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, MAX_PROJECT_SLUG_PREFIX_LENGTH);
-  const pathHash = createHash("sha256").update(resolvedProjectRoot).digest("hex").slice(0, 8);
-
-  return `${safe || "root"}-${pathHash}`;
-}
-
-function toIndexPath(file: string): string {
-  return file.split(path.sep).join("/");
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
