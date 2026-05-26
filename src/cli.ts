@@ -16,6 +16,7 @@ const require = createRequire(import.meta.url);
 const sade = require("sade") as typeof import("sade");
 
 const VERSION = "0.1.0";
+const MAX_COMMENT_LINES = 10;
 const MAX_INTERFACE_PROPERTIES = 15;
 const DEFAULT_SYMBOL_KINDS: SymbolKind[] = [
   "class",
@@ -68,6 +69,9 @@ interface CliJsonResult {
   signature?: string;
   declarationStart?: number;
   declarationEnd?: number;
+  commentStart?: number;
+  commentEnd?: number;
+  comments?: string[];
   signatureStart?: number;
   signatureEnd?: number;
   parameters?: SymbolSearchResult["parameters"];
@@ -184,6 +188,9 @@ function createJsonOutput(
       signature: result.signature,
       declarationStart: result.declarationStart,
       declarationEnd: result.declarationEnd,
+      commentStart: result.commentStart,
+      commentEnd: result.commentEnd,
+      comments: truncateComments(result.comments),
       signatureStart: result.signatureStart,
       signatureEnd: result.signatureEnd,
       parameters: result.parameters,
@@ -250,18 +257,25 @@ function createOutlineLines(
   lines: readonly string[],
   lineStarts: readonly number[],
 ): string[] {
-  const startOffset = result.declarationStart ?? result.start;
+  const declarationStartOffset = result.declarationStart ?? result.start;
+  const startOffset = result.commentStart ?? declarationStartOffset;
   const endOffset = result.declarationEnd ?? result.end;
   const startLine = offsetToLine(lineStarts, startOffset);
+  const declarationStartLine = offsetToLine(lineStarts, declarationStartOffset);
   const signatureEndLine = offsetToLine(
     lineStarts,
-    Math.max((result.signatureEnd ?? startOffset) - 1, startOffset),
+    Math.max((result.signatureEnd ?? declarationStartOffset) - 1, declarationStartOffset),
   );
   const endLine = Math.max(
-    startLine,
-    offsetToLine(lineStarts, Math.max(endOffset - 1, startOffset)),
+    declarationStartLine,
+    offsetToLine(lineStarts, Math.max(endOffset - 1, declarationStartOffset)),
   );
-  const signatureLines = createSignatureLines(startLine, signatureEndLine, lines);
+  const signatureLines = createSignatureLines(
+    startLine,
+    declarationStartLine,
+    signatureEndLine,
+    lines,
+  );
 
   if (endLine <= startLine) {
     return (
@@ -458,16 +472,56 @@ function collectInterfacePropertyLines(
 
 function createSignatureLines(
   startLine: number,
+  declarationStartLine: number,
   signatureEndLine: number,
   lines: readonly string[],
 ): string[] {
-  const output: string[] = [];
+  const output =
+    startLine < declarationStartLine
+      ? createCommentLines(startLine, declarationStartLine - 1, lines)
+      : [];
 
-  for (let line = startLine; line <= signatureEndLine; line += 1) {
+  for (let line = declarationStartLine; line <= signatureEndLine; line += 1) {
     output.push(formatCodeLine(line, lines[line - 1] ?? ""));
   }
 
   return output;
+}
+
+function createCommentLines(
+  startLine: number,
+  endLine: number,
+  lines: readonly string[],
+): string[] {
+  const lineCount = endLine - startLine + 1;
+  const visibleLineCount = Math.min(lineCount, MAX_COMMENT_LINES);
+  const output: string[] = [];
+
+  for (let index = 0; index < visibleLineCount; index += 1) {
+    const line = startLine + index;
+    output.push(formatCodeLine(line, lines[line - 1] ?? ""));
+  }
+
+  const hiddenCount = lineCount - visibleLineCount;
+
+  if (hiddenCount > 0) {
+    const lastVisibleLine = startLine + visibleLineCount - 1;
+    const indent = leadingWhitespace(lines[lastVisibleLine - 1] ?? "");
+    output.push(formatSyntheticLine(`${indent}(...and ${hiddenCount} more comment lines)`));
+  }
+
+  return output;
+}
+
+function truncateComments(comments: readonly string[] | undefined): string[] | undefined {
+  if (!comments || comments.length <= MAX_COMMENT_LINES) {
+    return comments ? [...comments] : undefined;
+  }
+
+  return [
+    ...comments.slice(0, MAX_COMMENT_LINES),
+    `(...and ${comments.length - MAX_COMMENT_LINES} more comment lines)`,
+  ];
 }
 
 function findLastNonEmptyLine(

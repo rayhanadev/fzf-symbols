@@ -39,16 +39,20 @@ Text output is grouped by file and rendered as a compact code outline:
 ````text
 src/button.tsx
 ```tsx
+  11 | /** Renders the primary button action. */
   12 | export function Button(props: ButtonProps) {
   13 |   ...
   16 | }
 
+  19 | // Public props accepted by Button.
   20 | export interface ButtonProps {
   21 |   label: string;
   22 |   onClick(): void;
   23 | }
 ```
 ````
+
+Adjacent comments are included with matching symbols. Comments longer than 10 lines are truncated with a summary line.
 
 Method and property matches include their enclosing class or object context:
 
@@ -57,11 +61,13 @@ src/button.tsx
 ```tsx
   10 | export class ButtonController {
      |   ...
+  13 |   /** Handles user interaction. */
   14 |   handleClick(): void {}
   15 | }
 
   18 | const buttonHelpers = {
      |   ...
+  21 |   // Default size when no explicit prop is provided.
   22 |   defaultSize: ButtonSize.Small,
   23 | };
 ```
@@ -108,6 +114,9 @@ JSON output wraps matches with query context for programmatic use:
       "signature": "function Button(props: ButtonProps)",
       "declarationStart": 120,
       "declarationEnd": 196,
+      "commentStart": 76,
+      "commentEnd": 115,
+      "comments": ["/** Renders the primary button action. */"],
       "signatureStart": 120,
       "signatureEnd": 164,
       "parameters": [{ "name": "props", "type": "ButtonProps", "optional": false, "rest": false }],
@@ -142,7 +151,7 @@ const symbolsFromMemory = extractSymbolsFromSource(
 
 ### Result Shape
 
-Search results include the symbol identity, location, declaration span, signature span, parsed parameters when available, a source snippet, score, and matched character positions.
+Search results include the symbol identity, location, adjacent comments when available, declaration span, signature span, parsed parameters, a source snippet, score, and matched character positions.
 
 ```ts
 interface SymbolSearchResult {
@@ -153,6 +162,9 @@ interface SymbolSearchResult {
   end: number;
   declarationStart?: number;
   declarationEnd?: number;
+  commentStart?: number;
+  commentEnd?: number;
+  comments?: string[];
   signatureStart?: number;
   signatureEnd?: number;
   line?: number;
