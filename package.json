@@ -1,6 +1,6 @@
 {
   "name": "@rayhanadev/truffler",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Fast fuzzy symbol search for JavaScript and TypeScript codebases.",
   "keywords": [
     "ai",

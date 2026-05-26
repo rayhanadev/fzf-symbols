@@ -1,5 +1,11 @@
 # truffler
 
+## 0.4.2
+
+### Patch Changes
+
+- 80d4074: Add fast ANSI syntax highlighting for human terminal text output while keeping CI and AI-agent runs plain.
+
 ## 0.4.1
 
 ### Patch Changes
