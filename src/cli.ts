@@ -3,6 +3,12 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 
+import {
+  highlightFence,
+  highlightFilePath,
+  highlightOutlineLines,
+  shouldHighlightTextResults,
+} from "./highlight.ts";
 import { SymbolParseError, searchSymbols } from "./index.ts";
 
 import type { SearchSymbolsOptions, SymbolKind, SymbolSearchResult } from "./index.ts";
@@ -107,7 +113,7 @@ export async function runCli(argv = process.argv): Promise<void> {
     .example("btn --kind function,class --limit 20 --format json")
     .action(async (query: string, root: string | undefined, options: CliOptions) => {
       try {
-        await runSearch(query, root, options);
+        await runSearch(query, root, options, argv);
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
         process.exitCode = 1;
@@ -120,6 +126,7 @@ async function runSearch(
   query: string,
   root: string | undefined,
   options: CliOptions,
+  argv: readonly string[],
 ): Promise<void> {
   const format = options.format ?? "text";
 
@@ -145,21 +152,30 @@ async function runSearch(
     return;
   }
 
-  await printTextResults(results);
+  await printTextResults(results, argv);
 }
 
-async function printTextResults(results: readonly SymbolSearchResult[]): Promise<void> {
+async function printTextResults(
+  results: readonly SymbolSearchResult[],
+  argv: readonly string[],
+): Promise<void> {
   const outlines = await createFileOutlines(results);
+  const highlight = shouldHighlightTextResults({ argv });
 
   for (const [index, outline] of outlines.entries()) {
     if (index > 0) {
       console.log("");
     }
 
-    console.log(formatFile(outline.file));
-    console.log(`\`\`\`${outline.language}`);
-    console.log(outline.lines.join("\n"));
-    console.log("```");
+    console.log(formatTerminalLine(formatFile(outline.file), highlightFilePath, highlight));
+    console.log(formatTerminalLine(`\`\`\`${outline.language}`, highlightFence, highlight));
+    console.log(
+      (highlight
+        ? await highlightOutlineLines(outline.lines, outline.language)
+        : outline.lines
+      ).join("\n"),
+    );
+    console.log(formatTerminalLine("```", highlightFence, highlight));
   }
 }
 
@@ -201,6 +217,14 @@ function createJsonOutput(
 function formatFile(file: string): string {
   const relativePath = path.relative(process.cwd(), file);
   return relativePath.length > 0 && !relativePath.startsWith("..") ? relativePath : file;
+}
+
+function formatTerminalLine(
+  line: string,
+  highlighter: (line: string) => string,
+  highlight: boolean,
+): string {
+  return highlight ? highlighter(line) : line;
 }
 
 function warnParseError(error: SymbolParseError): void {

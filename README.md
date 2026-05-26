@@ -63,6 +63,8 @@ src/button.tsx
 ```
 ````
 
+When text output is printed to a human terminal, `truffler` adds ANSI syntax highlighting to the code outline. Highlighting is skipped for JSON output, disabled color environments such as `NO_COLOR` or `--no-color`, CI environments, and known AI-agent environments.
+
 Adjacent comments are included with matching symbols. Comments longer than 10 lines are truncated with a summary line.
 
 Method and property matches include their enclosing class or object context:
