@@ -1,0 +1,19 @@
+src/highlight.ts
+  s_959f611f028c85::t_1f1f25d4fd197f 194-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8295c71f48c3c9969ae4e220e88e2e79fe4016ac",
+  "prompts": {},
+  "sessions": {
+    "s_959f611f028c85": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "5f6fda64-2f54-404a-ad3f-ff3595938d09",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Rayhan Noufal Arayilakath <me@rayhanadev.com>"
+    }
+  }
+}
