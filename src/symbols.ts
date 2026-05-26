@@ -1,5 +1,7 @@
 import { parseSync, visitorKeys } from "oxc-parser";
 
+import { SymbolParseError, SymbolWalkError } from "./errors.ts";
+
 import type {
   ExtractedName,
   ExtractSymbolsOptions,
@@ -109,23 +111,20 @@ export function extractSymbolsFromSource(
     });
 
     if (result.errors.length > 0) {
-      options.onError?.({
-        kind: "parse",
-        file: filename,
-        message: result.errors.map((error) => error.message).join("\n"),
-      });
+      throw new SymbolParseError(filename, result.errors.map((error) => error.message).join("\n"));
     }
 
     program = result.program as unknown as AstNode;
   } catch (cause) {
-    options.onError?.({
-      kind: "parse",
-      file: filename,
-      message: cause instanceof Error ? cause.message : "Failed to parse source",
-      cause,
-    });
+    if (cause instanceof SymbolParseError) {
+      throw cause;
+    }
 
-    return [];
+    throw new SymbolParseError(
+      filename,
+      cause instanceof Error ? cause.message : "Failed to parse source",
+      { cause },
+    );
   }
 
   try {
@@ -141,12 +140,11 @@ export function extractSymbolsFromSource(
       return nextContainer ?? container;
     });
   } catch (cause) {
-    options.onError?.({
-      kind: "walk",
-      file: filename,
-      message: cause instanceof Error ? cause.message : "Failed to walk AST",
-      cause,
-    });
+    throw new SymbolWalkError(
+      filename,
+      cause instanceof Error ? cause.message : "Failed to walk AST",
+      { cause },
+    );
   }
 
   return symbols;

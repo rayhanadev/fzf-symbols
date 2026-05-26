@@ -1,4 +1,12 @@
 export { discoverFiles } from "./files.ts";
+export {
+  SymbolFileReadError,
+  SymbolIndexWriteError,
+  SymbolParseError,
+  SymbolScanAbortedError,
+  SymbolWalkError,
+  TrufflerError,
+} from "./errors.ts";
 export { rankSymbols, scoreFuzzy } from "./fuzzy.ts";
 export { getProjectIndexDirectory } from "./index-cache.ts";
 export { scanSymbols, searchSymbols } from "./scanner.ts";
@@ -12,7 +20,5 @@ export type {
   SymbolKind,
   SymbolParameter,
   SymbolRecord,
-  SymbolScannerError,
-  SymbolScannerErrorKind,
   SymbolSearchResult,
 } from "./types.ts";

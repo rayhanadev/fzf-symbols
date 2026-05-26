@@ -3,9 +3,10 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { SymbolFileReadError, SymbolIndexWriteError, SymbolScanAbortedError } from "./errors.ts";
 import { extractSymbolsFromSource } from "./symbols.ts";
 
-import type { ScanSymbolsOptions, SymbolRecord, SymbolScannerError } from "./types.ts";
+import type { ScanSymbolsOptions, SymbolRecord } from "./types.ts";
 
 const INDEX_SCHEMA_VERSION = 1;
 const EXTRACTOR_VERSION = "symbols-v1";
@@ -25,25 +26,12 @@ const SYMBOL_KINDS = new Set<SymbolRecord["kind"]>([
   "type",
   "variable",
 ]);
-const ERROR_KINDS = new Set<SymbolScannerError["kind"]>([
-  "file-read",
-  "index-write",
-  "parse",
-  "walk",
-]);
 
 interface CachedFile {
   hash: string;
   mtimeMs: number;
   size: number;
   symbols: SymbolRecord[];
-  errors?: CachedSymbolScannerError[];
-}
-
-interface CachedSymbolScannerError {
-  kind: SymbolScannerError["kind"];
-  file: string;
-  message: string;
 }
 
 interface ProjectIndex {
@@ -84,23 +72,14 @@ export async function scanSymbolsWithIndex(
 
     const relativePath = toIndexPath(path.relative(projectRoot, file));
     const cached = index.files[relativePath];
-    const state = await readFileState(file, options);
-
-    if (!state) {
-      continue;
-    }
+    const state = await readFileState(file);
 
     if (cached && isFresh(cached, state)) {
-      replayCachedErrors(cached, options);
       appendSymbols(symbols, cached.symbols, allowedKinds);
       continue;
     }
 
-    const indexed = await indexFile(file, state, cached, options);
-
-    if (!indexed) {
-      continue;
-    }
+    const indexed = await indexFile(file, state, cached);
 
     index.files[relativePath] = indexed;
     updatedRelativePaths.add(relativePath);
@@ -113,12 +92,11 @@ export async function scanSymbolsWithIndex(
     try {
       await writeProjectIndex(location, index, currentRelativePaths, updatedRelativePaths);
     } catch (cause) {
-      options.onError?.({
-        kind: "index-write",
-        file: location.file,
-        message: cause instanceof Error ? cause.message : "Failed to write symbol index",
-        cause,
-      });
+      throw new SymbolIndexWriteError(
+        location.file,
+        cause instanceof Error ? cause.message : "Failed to write symbol index",
+        { cause },
+      );
     }
   }
 
@@ -187,10 +165,7 @@ function createEmptyProjectIndex(projectRoot: string): ProjectIndex {
   };
 }
 
-async function readFileState(
-  file: string,
-  options: ScanSymbolsOptions,
-): Promise<FileState | undefined> {
+async function readFileState(file: string): Promise<FileState> {
   try {
     const info = await stat(file);
 
@@ -199,14 +174,11 @@ async function readFileState(
       size: info.size,
     };
   } catch (cause) {
-    options.onError?.({
-      kind: "file-read",
+    throw new SymbolFileReadError(
       file,
-      message: cause instanceof Error ? cause.message : "Failed to stat file",
-      cause,
-    });
-
-    return undefined;
+      cause instanceof Error ? cause.message : "Failed to stat file",
+      { cause },
+    );
   }
 }
 
@@ -218,21 +190,17 @@ async function indexFile(
   file: string,
   state: FileState,
   cached: CachedFile | undefined,
-  options: ScanSymbolsOptions,
-): Promise<CachedFile | undefined> {
+): Promise<CachedFile> {
   let source: string;
 
   try {
     source = await readFile(file, "utf8");
   } catch (cause) {
-    options.onError?.({
-      kind: "file-read",
+    throw new SymbolFileReadError(
       file,
-      message: cause instanceof Error ? cause.message : "Failed to read file",
-      cause,
-    });
-
-    return undefined;
+      cause instanceof Error ? cause.message : "Failed to read file",
+      { cause },
+    );
   }
 
   const hash = createContentHash(source);
@@ -244,39 +212,17 @@ async function indexFile(
       size: state.size,
     };
 
-    replayCachedErrors(refreshed, options);
     return refreshed;
   }
 
-  const errors: CachedSymbolScannerError[] = [];
-  const symbols = extractSymbolsFromSource(file, source, {
-    onError: (error) => {
-      options.onError?.(error);
-      errors.push({
-        kind: error.kind,
-        file: error.file,
-        message: error.message,
-      });
-    },
-  });
+  const symbols = extractSymbolsFromSource(file, source);
 
   return {
     hash,
     mtimeMs: state.mtimeMs,
     size: state.size,
     symbols,
-    ...(errors.length > 0 ? { errors } : {}),
   };
-}
-
-function replayCachedErrors(cached: CachedFile, options: ScanSymbolsOptions): void {
-  if (!cached.errors) {
-    return;
-  }
-
-  for (const error of cached.errors) {
-    options.onError?.(error);
-  }
 }
 
 function appendSymbols(
@@ -365,12 +311,6 @@ function sanitizeCachedFile(value: unknown): CachedFile | undefined {
         return sanitized ? [sanitized] : [];
       })
     : undefined;
-  const errors = Array.isArray(value.errors)
-    ? value.errors.flatMap((error) => {
-        const sanitized = sanitizeCachedSymbolScannerError(error);
-        return sanitized ? [sanitized] : [];
-      })
-    : undefined;
 
   if (
     typeof value.hash !== "string" ||
@@ -386,7 +326,6 @@ function sanitizeCachedFile(value: unknown): CachedFile | undefined {
     mtimeMs: value.mtimeMs,
     size: value.size,
     symbols,
-    ...(errors && errors.length > 0 ? { errors } : {}),
   };
 }
 
@@ -426,29 +365,8 @@ function sanitizeSymbolRecord(value: unknown): SymbolRecord | undefined {
   };
 }
 
-function sanitizeCachedSymbolScannerError(value: unknown): CachedSymbolScannerError | undefined {
-  if (
-    !isRecord(value) ||
-    !isErrorKind(value.kind) ||
-    typeof value.file !== "string" ||
-    typeof value.message !== "string"
-  ) {
-    return undefined;
-  }
-
-  return {
-    kind: value.kind,
-    file: value.file,
-    message: value.message,
-  };
-}
-
 function isSymbolKind(value: unknown): value is SymbolRecord["kind"] {
   return typeof value === "string" && SYMBOL_KINDS.has(value as SymbolRecord["kind"]);
-}
-
-function isErrorKind(value: unknown): value is SymbolScannerError["kind"] {
-  return typeof value === "string" && ERROR_KINDS.has(value as SymbolScannerError["kind"]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -539,6 +457,6 @@ function toIndexPath(file: string): string {
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
-    throw new Error("Symbol scan aborted");
+    throw new SymbolScanAbortedError();
   }
 }
