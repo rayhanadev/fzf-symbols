@@ -14,8 +14,9 @@ import type {
 
 const require = createRequire(import.meta.url);
 const sade = require("sade") as typeof import("sade");
+const packageJson = require("../package.json") as { version: string };
 
-const VERSION = "0.1.0";
+const VERSION = packageJson.version;
 const MAX_COMMENT_LINES = 10;
 const MAX_INTERFACE_PROPERTIES = 15;
 const DEFAULT_SYMBOL_KINDS: SymbolKind[] = [
@@ -277,7 +278,7 @@ function createOutlineLines(
     lines,
   );
 
-  if (endLine <= startLine) {
+  if (endLine <= declarationStartLine) {
     return (
       createMemberOutlineIfNeeded(result, signatureLines, startLine, endLine, lines) ??
       signatureLines
@@ -289,6 +290,13 @@ function createOutlineLines(
   if (!endText) {
     return (
       createMemberOutlineIfNeeded(result, signatureLines, startLine, endLine, lines) ??
+      signatureLines
+    );
+  }
+
+  if (endText.line <= signatureEndLine) {
+    return (
+      createMemberOutlineIfNeeded(result, signatureLines, startLine, endText.line, lines) ??
       signatureLines
     );
   }
