@@ -1,5 +1,17 @@
 # truffler
 
+## 0.3.0
+
+### Minor Changes
+
+- d3d40be: Include adjacent symbol comments in search output.
+
+  Symbols now expose adjacent `comments`, `commentStart`, and `commentEnd` metadata, and the CLI renders those comments in text and JSON output. Large comments are truncated in CLI output after 10 lines, and `truffler --version` now reports the version from `package.json`.
+
+- b90c0f1: Rename the package to `@rayhanadev/truffler` and the CLI binary to `truffler`.
+
+  Install the package with `bun add @rayhanadev/truffler`, run one-off searches with `bunx @rayhanadev/truffler`, and use the `truffler` command once installed.
+
 ## 0.2.1
 
 ### Patch Changes
