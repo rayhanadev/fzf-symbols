@@ -1,4 +1,4 @@
-# fzfsym
+# truffler
 
 ## 0.2.1
 
@@ -22,7 +22,7 @@
 
 ### Patch Changes
 
-- d2a8211: No longer includes constants/variables by default when running fzfsym CLI.
+- d2a8211: No longer includes constants/variables by default when running truffler CLI.
 
 ## 0.1.0
 

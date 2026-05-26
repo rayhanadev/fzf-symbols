@@ -100,7 +100,7 @@ interface EnclosingBlock {
 }
 
 export async function runCli(argv = process.argv): Promise<void> {
-  sade("fzfsym <query> [root]", true)
+  sade("truffler <query> [root]", true)
     .version(VERSION)
     .describe("Find code symbols by fuzzy name matching.")
     .option("-l, --limit", "Maximum number of results to print.", 50)

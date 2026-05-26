@@ -1,54 +1,42 @@
-# fzfsym
+# truffler
 
 Fast fuzzy symbol search for JavaScript and TypeScript codebases, powered by [`oxc-parser`](https://oxc.rs).
 
-`fzfsym` scans source files, extracts declarations, fuzzy-ranks matching symbols, and returns output that is readable by humans and useful to AI tools.
+`truffler` scans source files, extracts declarations, fuzzy-ranks matching symbols, and returns output that is readable by humans and useful to AI tools.
 
 ## Install
 
 ```bash
-bun add fzfsym
+bun add @rayhanadev/truffler
 ```
 
 Run the CLI without installing it into a project:
 
 ```bash
-bunx fzfsym Button
+bunx @rayhanadev/truffler Button
 ```
 
-## Agent Skill
+## Install the Skill
 
-This repository includes a skill that helps agents use `fzfsym` before writing JavaScript or TypeScript code, so they can find similar/pre-existing functions and avoid duplicate helpers.
+This repository includes a skill that helps agents use `truffler` before writing JavaScript or TypeScript code, so they can find similar/pre-existing functions and avoid duplicate helpers.
 
 Install it from this repository with Vercel's Skills CLI:
 
 ```bash
-npx skills add rayhanadev/fzfsym --skill fzfsym-similar-functions
+npx skills add rayhanadev/truffler --skill find-similar-functions
 ```
 
-Install it from a local checkout:
-
-```bash
-npx skills add . --skill fzfsym-similar-functions
-```
-
-Add `-g` or `--global` to install it for personal use across projects, and add `-a <agent>` to target a specific agent such as `claude-code` or `cursor`:
-
-```bash
-npx skills add rayhanadev/fzfsym --skill fzfsym-similar-functions -g -a claude-code
-```
-
-The skill expects the `fzfsym` CLI to be available in the target project or runnable with `bunx fzfsym`.
+The skill expects the `truffler` CLI to be available in the target project or runnable with `bunx @rayhanadev/truffler`.
 
 ## CLI
 
 Search for symbols in a file or directory:
 
 ```bash
-fzfsym Button src
-fzfsym btn test/fixtures/sample.tsx --kind function,class --limit 10
-fzfsym props src --kind interface
-fzfsym button src --format json
+truffler Button src
+truffler btn test/fixtures/sample.tsx --kind function,class --limit 10
+truffler props src --kind interface
+truffler button src --format json
 ```
 
 Options:
@@ -157,7 +145,7 @@ JSON output wraps matches with query context for programmatic use:
 Use `searchSymbols` when you want ranked fuzzy matches, or `scanSymbols` when you want the full symbol index.
 
 ```ts
-import { extractSymbolsFromSource, scanSymbols, searchSymbols } from "fzfsym";
+import { extractSymbolsFromSource, scanSymbols, searchSymbols } from "@rayhanadev/truffler";
 
 const results = await searchSymbols("btn", {
   root: "src",
