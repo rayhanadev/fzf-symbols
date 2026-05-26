@@ -14,63 +14,12 @@ const INDEX_SCHEMA_VERSION = 1;
 const EXTRACTOR_VERSION = "symbols-v1";
 const INDEX_FILENAME = "symbols.json";
 const MAX_PROJECT_SLUG_PREFIX_LENGTH = 96;
-const SymbolKindSchema = arkType.enumerated(
-  "class",
-  "constant",
-  "enum",
-  "enum-member",
-  "export",
-  "function",
-  "import",
-  "interface",
-  "method",
-  "property",
-  "type",
-  "variable",
-);
-const SymbolParameterSchema = arkType({
-  name: "string",
-  "type?": "string",
-  "optional?": "boolean",
-  "rest?": "boolean",
-  "default?": "string",
-});
-const SymbolRecordSchema = arkType({
-  name: "string",
-  kind: SymbolKindSchema,
-  file: "string",
-  start: "number",
-  end: "number",
-  "declarationStart?": "number",
-  "declarationEnd?": "number",
-  "line?": "number",
-  "column?": "number",
-  "container?": "string",
-  "exported?": "boolean",
-  "signature?": "string",
-  "signatureStart?": "number",
-  "signatureEnd?": "number",
-  "parameters?": SymbolParameterSchema.array(),
-  "returnType?": "string",
-  "comments?": "string[]",
-  "commentStart?": "number",
-  "commentEnd?": "number",
-  "snippet?": "string",
-});
-const CachedFileSchema = arkType({
-  hash: "string",
-  mtimeMs: "number",
-  size: "number",
-  symbols: SymbolRecordSchema.array(),
-});
 const ProjectIndexSchema = arkType({
   schemaVersion: "number",
   extractorVersion: "string",
   projectRoot: "string",
   updatedAt: "string",
-  files: {
-    "[string]": CachedFileSchema,
-  },
+  files: "object",
 });
 
 interface CachedFile {
@@ -204,7 +153,7 @@ async function readProjectIndex(file: string, projectRoot: string): Promise<Proj
         extractorVersion: EXTRACTOR_VERSION,
         projectRoot,
         updatedAt: parsed.updatedAt,
-        files: parsed.files,
+        files: Array.isArray(parsed.files) ? {} : (parsed.files as Record<string, CachedFile>),
       };
     }
   } catch {
