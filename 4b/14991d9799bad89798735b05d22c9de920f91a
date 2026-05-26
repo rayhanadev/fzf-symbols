@@ -1,0 +1,24 @@
+bun.lock
+  ai_agent 8,26-29,462-464
+src/index-cache.ts
+  s_4fd2addc704c57::t_bb66e3647587da 6-7,17,30-74
+  s_4fd2addc704c57::t_cccceda882d8dc 194,197,200,206-207
+package.json
+  s_4fd2addc704c57::t_040ab44cd2a028 56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4b14991d9799bad89798735b05d22c9de920f91a",
+  "prompts": {},
+  "sessions": {
+    "s_4fd2addc704c57": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "b75bc54b-5742-40b3-bae1-75e7b6ed7765",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Rayhan Noufal Arayilakath <me@rayhanadev.com>"
+    }
+  }
+}
