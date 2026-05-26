@@ -47,10 +47,14 @@ export async function scanSymbolsWithIndex(
   files: readonly string[],
   options: ScanSymbolsOptions,
 ): Promise<SymbolRecord[]> {
-  const projectRoot = getProjectRoot(options);
+  const projectRoot = await getProjectRoot(options);
   const location = getProjectIndexLocation(projectRoot);
   const index = await readProjectIndex(location.file, projectRoot);
   const symbols: SymbolRecord[] = [];
+  const allowedKinds = options.symbolKinds ? new Set(options.symbolKinds) : undefined;
+  const currentRelativePaths = new Set(
+    files.map((file) => toIndexPath(path.relative(projectRoot, file))),
+  );
   let indexChanged = false;
 
   for (const file of files) {
@@ -66,7 +70,7 @@ export async function scanSymbolsWithIndex(
 
     if (cached && isFresh(cached, state)) {
       replayCachedErrors(cached, options);
-      symbols.push(...filterSymbols(cached.symbols, options));
+      symbols.push(...filterSymbols(cached.symbols, allowedKinds));
       continue;
     }
 
@@ -78,12 +82,12 @@ export async function scanSymbolsWithIndex(
 
     index.files[relativePath] = indexed;
     indexChanged = true;
-    symbols.push(...filterSymbols(indexed.symbols, options));
+    symbols.push(...filterSymbols(indexed.symbols, allowedKinds));
   }
 
-  if (indexChanged) {
+  if (indexChanged || hasStaleEntries(index, currentRelativePaths)) {
     index.updatedAt = new Date().toISOString();
-    await writeProjectIndex(location, index);
+    await writeProjectIndex(location, index, currentRelativePaths);
   }
 
   return symbols;
@@ -93,8 +97,16 @@ export function getProjectIndexDirectory(projectRoot: string): string {
   return path.join(homedir(), ".truffler", "projects", createProjectSlug(projectRoot));
 }
 
-function getProjectRoot(options: ScanSymbolsOptions): string {
-  return options.cwd ? path.resolve(options.cwd) : process.cwd();
+async function getProjectRoot(options: ScanSymbolsOptions): Promise<string> {
+  const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
+  const root = path.resolve(cwd, options.root ?? ".");
+
+  try {
+    const info = await stat(root);
+    return info.isFile() ? path.dirname(root) : root;
+  } catch {
+    return root;
+  }
 }
 
 function getProjectIndexLocation(projectRoot: string): ProjectIndexLocation {
@@ -115,10 +127,16 @@ async function readProjectIndex(file: string, projectRoot: string): Promise<Proj
       parsed.schemaVersion === INDEX_SCHEMA_VERSION &&
       parsed.extractorVersion === EXTRACTOR_VERSION &&
       parsed.projectRoot === projectRoot &&
-      parsed.files &&
-      typeof parsed.files === "object"
+      isRecord(parsed.files)
     ) {
-      return parsed as ProjectIndex;
+      return {
+        schemaVersion: INDEX_SCHEMA_VERSION,
+        extractorVersion: EXTRACTOR_VERSION,
+        projectRoot,
+        updatedAt:
+          typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
+        files: sanitizeCachedFiles(parsed.files),
+      };
     }
   } catch {
     // A missing or unreadable index should never block a symbol scan.
@@ -229,12 +247,14 @@ function replayCachedErrors(cached: CachedFile, options: ScanSymbolsOptions): vo
   }
 }
 
-function filterSymbols(symbols: readonly SymbolRecord[], options: ScanSymbolsOptions): SymbolRecord[] {
-  if (!options.symbolKinds) {
+function filterSymbols(
+  symbols: readonly SymbolRecord[],
+  allowedKinds: Set<SymbolRecord["kind"]> | undefined,
+): SymbolRecord[] {
+  if (!allowedKinds) {
     return [...symbols];
   }
 
-  const allowedKinds = new Set(options.symbolKinds);
   return symbols.filter((symbol) => allowedKinds.has(symbol.kind));
 }
 
@@ -242,16 +262,81 @@ function createContentHash(source: string): string {
   return createHash("sha256").update(source).digest("hex");
 }
 
-async function writeProjectIndex(location: ProjectIndexLocation, index: ProjectIndex): Promise<void> {
+async function writeProjectIndex(
+  location: ProjectIndexLocation,
+  index: ProjectIndex,
+  currentRelativePaths: ReadonlySet<string>,
+): Promise<void> {
   await mkdir(location.directory, { recursive: true });
+
+  const latestIndex = await readProjectIndex(location.file, index.projectRoot);
+  const files: Record<string, CachedFile> = {};
+
+  for (const relativePath of currentRelativePaths) {
+    const cached = index.files[relativePath] ?? latestIndex.files[relativePath];
+
+    if (cached) {
+      files[relativePath] = cached;
+    }
+  }
+
+  const nextIndex: ProjectIndex = {
+    ...index,
+    updatedAt: new Date().toISOString(),
+    files,
+  };
 
   const temporaryFile = path.join(
     location.directory,
     `${INDEX_FILENAME}.${process.pid}.${Date.now()}.tmp`,
   );
 
-  await writeFile(temporaryFile, `${JSON.stringify(index)}\n`, "utf8");
+  await writeFile(temporaryFile, `${JSON.stringify(nextIndex)}\n`, "utf8");
   await rename(temporaryFile, location.file);
+}
+
+function hasStaleEntries(index: ProjectIndex, currentRelativePaths: ReadonlySet<string>): boolean {
+  return Object.keys(index.files).some((relativePath) => !currentRelativePaths.has(relativePath));
+}
+
+function sanitizeCachedFiles(files: Record<string, unknown>): Record<string, CachedFile> {
+  const sanitized: Record<string, CachedFile> = {};
+
+  for (const [relativePath, value] of Object.entries(files)) {
+    if (isCachedFile(value)) {
+      sanitized[relativePath] = value;
+    }
+  }
+
+  return sanitized;
+}
+
+function isCachedFile(value: unknown): value is CachedFile {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.hash === "string" &&
+    typeof value.mtimeMs === "number" &&
+    typeof value.size === "number" &&
+    Array.isArray(value.symbols) &&
+    (value.errors === undefined ||
+      (Array.isArray(value.errors) && value.errors.every(isCachedSymbolScannerError)))
+  );
+}
+
+function isCachedSymbolScannerError(value: unknown): value is CachedSymbolScannerError {
+  return (
+    isRecord(value) &&
+    typeof value.kind === "string" &&
+    typeof value.file === "string" &&
+    typeof value.message === "string"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function createProjectSlug(projectRoot: string): string {
