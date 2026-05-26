@@ -191,8 +191,10 @@ export async function highlightOutlineLines(
 }
 
 function parseOutlineLine(line: string): { prefix?: string; code: string } {
-  if (line.length >= 7 && line[5] === "|" && line[6] === " ") {
-    return { prefix: line.slice(0, 7), code: line.slice(7) };
+  const prefix = line.match(/^(?: *\d+ \| | {5}\| )/)?.[0];
+
+  if (prefix) {
+    return { prefix, code: line.slice(prefix.length) };
   }
 
   return { code: line };
