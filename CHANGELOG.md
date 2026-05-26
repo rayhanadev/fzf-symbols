@@ -1,5 +1,11 @@
 # truffler
 
+## 0.4.1
+
+### Patch Changes
+
+- 4dce0c5: Skip files with syntax errors when running the CLI so a broken source file does not abort the entire scan.
+
 ## 0.4.0
 
 ### Minor Changes
