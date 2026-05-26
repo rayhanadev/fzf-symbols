@@ -16,6 +16,30 @@ Run the CLI without installing it into a project:
 bunx fzfsym Button
 ```
 
+## Agent Skill
+
+This repository includes a skill that helps agents use `fzfsym` before writing JavaScript or TypeScript code, so they can find similar/pre-existing functions and avoid duplicate helpers.
+
+Install it from this repository with Vercel's Skills CLI:
+
+```bash
+npx skills add rayhanadev/fzfsym --skill fzfsym-similar-functions
+```
+
+Install it from a local checkout:
+
+```bash
+npx skills add . --skill fzfsym-similar-functions
+```
+
+Add `-g` or `--global` to install it for personal use across projects, and add `-a <agent>` to target a specific agent such as `claude-code` or `cursor`:
+
+```bash
+npx skills add rayhanadev/fzfsym --skill fzfsym-similar-functions -g -a claude-code
+```
+
+The skill expects the `fzfsym` CLI to be available in the target project or runnable with `bunx fzfsym`.
+
 ## CLI
 
 Search for symbols in a file or directory:
