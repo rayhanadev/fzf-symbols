@@ -1,6 +1,8 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { SymbolScanAbortedError } from "./errors.ts";
+
 import type { FileDiscoveryOptions } from "./types.ts";
 
 const DEFAULT_EXTENSIONS = [
@@ -191,6 +193,6 @@ function normalizePath(file: string): string {
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
-    throw new Error("Symbol scan aborted");
+    throw new SymbolScanAbortedError();
   }
 }

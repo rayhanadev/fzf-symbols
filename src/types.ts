@@ -40,15 +40,6 @@ export interface SymbolSearchResult extends SymbolRecord {
   matches: number[];
 }
 
-export type SymbolScannerErrorKind = "file-read" | "parse" | "walk";
-
-export interface SymbolScannerError {
-  kind: SymbolScannerErrorKind;
-  file: string;
-  message: string;
-  cause?: unknown;
-}
-
 export interface FileDiscoveryOptions {
   root?: string;
   cwd?: string;
@@ -60,7 +51,6 @@ export interface FileDiscoveryOptions {
 
 export interface ExtractSymbolsOptions {
   symbolKinds?: readonly SymbolKind[];
-  onError?: (error: SymbolScannerError) => void;
 }
 
 export interface ScanSymbolsOptions extends FileDiscoveryOptions, ExtractSymbolsOptions {}

@@ -44,7 +44,6 @@ Options:
 - `--limit`, `-l`: maximum results to print, default `50`.
 - `--format`, `-f`: output format. Options: `text`, `json`. Default: `text`.
 - `--kind`, `-k`: comma-separated symbol kinds to include. Default: `class`, `enum`, `function`, `interface`, `method`, `property`, `type`. Options: `class`, `constant`, `enum`, `enum-member`, `export`, `function`, `import`, `interface`, `method`, `property`, `type`, `variable`.
-- `--verbose`: print parser and file diagnostics.
 
 Text output is grouped by file and rendered as a compact code outline:
 
@@ -110,6 +109,12 @@ src/button.tsx
   27 | }
 ```
 ````
+
+## Indexing
+
+`truffler` persists a per-project symbol index under your home directory (`os.homedir()`), at `.truffler/projects/<path-to-project-with-dashes>-<path-hash>/symbols.json`.
+
+Each scan still discovers matching files, but unchanged files reuse cached `SymbolRecord` data instead of being read and parsed with `oxc-parser`. When file metadata changes, `truffler` hashes the file content; if the hash matches the cached entry, it refreshes metadata without reparsing. Only files with changed content are reindexed.
 
 JSON output wraps matches with query context for programmatic use:
 

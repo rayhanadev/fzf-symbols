@@ -5,12 +5,7 @@ import path from "node:path";
 
 import { searchSymbols } from "./index.ts";
 
-import type {
-  SearchSymbolsOptions,
-  SymbolKind,
-  SymbolScannerError,
-  SymbolSearchResult,
-} from "./index.ts";
+import type { SearchSymbolsOptions, SymbolKind, SymbolSearchResult } from "./index.ts";
 
 const require = createRequire(import.meta.url);
 const sade = require("sade") as typeof import("sade");
@@ -49,7 +44,6 @@ interface CliOptions {
   limit?: number | string;
   format?: string;
   kind?: string;
-  verbose?: boolean;
 }
 
 interface CliJsonOutput {
@@ -109,7 +103,6 @@ export async function runCli(argv = process.argv): Promise<void> {
       "-k, --kind",
       `Comma-separated symbol kinds. Default: ${DEFAULT_KIND_HELP}. Options: ${ALL_KIND_HELP}.`,
     )
-    .option("--verbose", "Print parser and file diagnostics.", false)
     .example("Button src")
     .example("btn --kind function,class --limit 20 --format json")
     .action(async (query: string, root: string | undefined, options: CliOptions) => {
@@ -139,7 +132,6 @@ async function runSearch(
     cwd: process.cwd(),
     limit: parseLimit(options.limit),
     symbolKinds: parseSymbolKinds(options.kind),
-    onError: createErrorReporter(Boolean(options.verbose)),
   };
 
   const results = await searchSymbols(query, searchOptions);
@@ -649,16 +641,6 @@ function parseSymbolKinds(value: string | undefined): SymbolKind[] | undefined {
 
     return normalized;
   });
-}
-
-function createErrorReporter(verbose: boolean): (error: SymbolScannerError) => void {
-  return (error) => {
-    if (!verbose) {
-      return;
-    }
-
-    console.error(`[${error.kind}] ${error.file}: ${error.message}`);
-  };
 }
 
 if (import.meta.main) {
