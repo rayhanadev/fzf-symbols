@@ -1,5 +1,5 @@
 {
-  "name": "fzfsym",
+  "name": "@rayhanadev/truffler",
   "version": "0.2.1",
   "description": "Fast fuzzy symbol search for JavaScript and TypeScript codebases.",
   "keywords": [
@@ -12,17 +12,17 @@
     "symbols",
     "typescript"
   ],
-  "homepage": "https://github.com/rayhanadev/fzfsym#readme",
+  "homepage": "https://github.com/rayhanadev/truffler#readme",
   "bugs": {
-    "url": "https://github.com/rayhanadev/fzfsym/issues"
+    "url": "https://github.com/rayhanadev/truffler/issues"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rayhanadev/fzfsym.git"
+    "url": "git+https://github.com/rayhanadev/truffler.git"
   },
   "bin": {
-    "fzfsym": "./src/cli.ts"
+    "truffler": "./src/cli.ts"
   },
   "files": [
     "src",
