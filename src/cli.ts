@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 
-import { searchSymbols } from "./index.ts";
+import { SymbolParseError, searchSymbols } from "./index.ts";
 
 import type { SearchSymbolsOptions, SymbolKind, SymbolSearchResult } from "./index.ts";
 
@@ -132,6 +132,8 @@ async function runSearch(
     cwd: process.cwd(),
     limit: parseLimit(options.limit),
     symbolKinds: parseSymbolKinds(options.kind),
+    ignoreParseErrors: true,
+    onParseError: warnParseError,
   };
 
   const results = await searchSymbols(query, searchOptions);
@@ -199,6 +201,15 @@ function createJsonOutput(
 function formatFile(file: string): string {
   const relativePath = path.relative(process.cwd(), file);
   return relativePath.length > 0 && !relativePath.startsWith("..") ? relativePath : file;
+}
+
+function warnParseError(error: SymbolParseError): void {
+  console.error(`Warning: skipped ${formatFile(error.file)}: ${parseErrorMessage(error)}`);
+}
+
+function parseErrorMessage(error: SymbolParseError): string {
+  const prefix = `${error.file}: `;
+  return error.message.startsWith(prefix) ? error.message.slice(prefix.length) : error.message;
 }
 
 async function createFileOutlines(results: readonly SymbolSearchResult[]): Promise<FileOutline[]> {

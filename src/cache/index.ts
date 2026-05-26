@@ -2,7 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { SymbolFileReadError, SymbolIndexWriteError, SymbolScanAbortedError } from "../errors.ts";
+import {
+  SymbolFileReadError,
+  SymbolIndexWriteError,
+  SymbolParseError,
+  SymbolScanAbortedError,
+} from "../errors.ts";
 import { extractSymbolsFromSource } from "../symbols.ts";
 import type { ScanSymbolsOptions, SymbolRecord } from "../types.ts";
 import { INDEX_FILENAME } from "./constants.ts";
@@ -44,7 +49,17 @@ export async function scanSymbolsWithIndex(
       continue;
     }
 
-    const indexed = await indexFile(file, state, cached);
+    const indexed = await indexFile(file, state, cached, options);
+
+    if (!indexed) {
+      if (cached) {
+        delete index.files[relativePath];
+        updatedRelativePaths.add(relativePath);
+        indexChanged = true;
+      }
+
+      continue;
+    }
 
     index.files[relativePath] = indexed;
     updatedRelativePaths.add(relativePath);
@@ -121,7 +136,8 @@ async function indexFile(
   file: string,
   state: FileState,
   cached: V1CachedFile | undefined,
-): Promise<V1CachedFile> {
+  options: ScanSymbolsOptions,
+): Promise<V1CachedFile | undefined> {
   let source: string;
 
   try {
@@ -144,11 +160,24 @@ async function indexFile(
     };
   }
 
+  let symbols: SymbolRecord[];
+
+  try {
+    symbols = extractSymbolsFromSource(file, source);
+  } catch (cause) {
+    if (!(options.ignoreParseErrors && cause instanceof SymbolParseError)) {
+      throw cause;
+    }
+
+    options.onParseError?.(cause);
+    return undefined;
+  }
+
   return {
     hash,
     mtimeMs: state.mtimeMs,
     size: state.size,
-    symbols: extractSymbolsFromSource(file, source),
+    symbols,
   };
 }
 

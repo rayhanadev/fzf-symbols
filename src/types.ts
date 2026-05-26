@@ -1,3 +1,5 @@
+import type { SymbolParseError } from "./errors.ts";
+
 export type SymbolKind =
   | "class"
   | "constant"
@@ -53,7 +55,10 @@ export interface ExtractSymbolsOptions {
   symbolKinds?: readonly SymbolKind[];
 }
 
-export interface ScanSymbolsOptions extends FileDiscoveryOptions, ExtractSymbolsOptions {}
+export interface ScanSymbolsOptions extends FileDiscoveryOptions, ExtractSymbolsOptions {
+  ignoreParseErrors?: boolean;
+  onParseError?: (error: SymbolParseError) => void;
+}
 
 export interface SearchSymbolsOptions extends ScanSymbolsOptions {
   limit?: number;
