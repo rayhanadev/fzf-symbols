@@ -1,0 +1,30 @@
+src/cli.ts
+  s_080263533c63e7::t_afc80a5f44b24a 103
+CHANGELOG.md
+  s_080263533c63e7::t_46913d098c733e 1,25
+README.md
+  s_080263533c63e7::t_f8523a691d3285 1,5,10,16,36-39,148
+  s_080263533c63e7::t_2442b1c12532d6 21,29
+package.json
+  s_080263533c63e7::t_39caa642cf7b71 2,15,17,22,25
+.changeset/tiny-truffles-sniff.md
+  s_080263533c63e7::t_8440c50e8517fd 1-7
+.changeset/bright-lamps-smile.md
+  s_080263533c63e7::t_6544f72bbabeb9 2,7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "4d0e7948bafad1d0b877c06ba2ecdea1c2c44061",
+  "prompts": {},
+  "sessions": {
+    "s_080263533c63e7": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "5738732b-a44a-437c-a732-dc0c3e63ebfc",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Rayhan Noufal Arayilakath <me@rayhanadev.com>"
+    }
+  }
+}
