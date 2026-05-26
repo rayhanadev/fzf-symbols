@@ -10,11 +10,11 @@ import { extractSymbolsFromSource } from "./symbols.ts";
 
 import type { ScanSymbolsOptions, SymbolRecord } from "./types.ts";
 
-const INDEX_SCHEMA_VERSION = 1;
-const EXTRACTOR_VERSION = "symbols-v1";
+const V1_INDEX_SCHEMA_VERSION = 1;
+const V1_EXTRACTOR_VERSION = "symbols-v1";
 const INDEX_FILENAME = "symbols.json";
 const MAX_PROJECT_SLUG_PREFIX_LENGTH = 96;
-const ProjectIndexSchema = arkType({
+const V1ProjectIndexSchema = arkType({
   schemaVersion: "number",
   extractorVersion: "string",
   projectRoot: "string",
@@ -22,19 +22,19 @@ const ProjectIndexSchema = arkType({
   files: "object",
 });
 
-interface CachedFile {
+interface V1CachedFile {
   hash: string;
   mtimeMs: number;
   size: number;
   symbols: SymbolRecord[];
 }
 
-interface ProjectIndex {
+interface V1ProjectIndex {
   schemaVersion: number;
   extractorVersion: string;
   projectRoot: string;
   updatedAt: string;
-  files: Record<string, CachedFile>;
+  files: Record<string, V1CachedFile>;
 }
 
 interface FileState {
@@ -137,36 +137,37 @@ function getProjectIndexLocation(projectRoot: string): ProjectIndexLocation {
   };
 }
 
-async function readProjectIndex(file: string, projectRoot: string): Promise<ProjectIndex> {
+async function readProjectIndex(file: string, projectRoot: string): Promise<V1ProjectIndex> {
   try {
     const raw = await readFile(file, "utf8");
-    const parsed = ProjectIndexSchema(JSON.parse(raw));
+    const parsed = V1ProjectIndexSchema(JSON.parse(raw));
 
     if (
       !(parsed instanceof arkType.errors) &&
-      parsed.schemaVersion === INDEX_SCHEMA_VERSION &&
-      parsed.extractorVersion === EXTRACTOR_VERSION &&
+      parsed.schemaVersion === V1_INDEX_SCHEMA_VERSION &&
+      parsed.extractorVersion === V1_EXTRACTOR_VERSION &&
       parsed.projectRoot === projectRoot
     ) {
       return {
-        schemaVersion: INDEX_SCHEMA_VERSION,
-        extractorVersion: EXTRACTOR_VERSION,
+        schemaVersion: V1_INDEX_SCHEMA_VERSION,
+        extractorVersion: V1_EXTRACTOR_VERSION,
         projectRoot,
         updatedAt: parsed.updatedAt,
-        files: Array.isArray(parsed.files) ? {} : (parsed.files as Record<string, CachedFile>),
+        files: Array.isArray(parsed.files) ? {} : (parsed.files as Record<string, V1CachedFile>),
       };
     }
   } catch {
     // A missing or unreadable index should never block a symbol scan.
   }
 
-  return createEmptyProjectIndex(projectRoot);
+  // No migrations exist yet; incompatible cache versions are rebuilt from source.
+  return createEmptyV1ProjectIndex(projectRoot);
 }
 
-function createEmptyProjectIndex(projectRoot: string): ProjectIndex {
+function createEmptyV1ProjectIndex(projectRoot: string): V1ProjectIndex {
   return {
-    schemaVersion: INDEX_SCHEMA_VERSION,
-    extractorVersion: EXTRACTOR_VERSION,
+    schemaVersion: V1_INDEX_SCHEMA_VERSION,
+    extractorVersion: V1_EXTRACTOR_VERSION,
     projectRoot,
     updatedAt: new Date().toISOString(),
     files: {},
@@ -190,15 +191,15 @@ async function readFileState(file: string): Promise<FileState> {
   }
 }
 
-function isFresh(cached: CachedFile, state: FileState): boolean {
+function isFresh(cached: V1CachedFile, state: FileState): boolean {
   return cached.size === state.size && cached.mtimeMs === state.mtimeMs;
 }
 
 async function indexFile(
   file: string,
   state: FileState,
-  cached: CachedFile | undefined,
-): Promise<CachedFile> {
+  cached: V1CachedFile | undefined,
+): Promise<V1CachedFile> {
   let source: string;
 
   try {
@@ -256,14 +257,14 @@ function createContentHash(source: string): string {
 
 async function writeProjectIndex(
   location: ProjectIndexLocation,
-  index: ProjectIndex,
+  index: V1ProjectIndex,
   currentRelativePaths: ReadonlySet<string>,
   updatedRelativePaths: ReadonlySet<string>,
 ): Promise<void> {
   await mkdir(location.directory, { recursive: true });
 
   const latestIndex = await readProjectIndex(location.file, index.projectRoot);
-  const files: Record<string, CachedFile> = {};
+  const files: Record<string, V1CachedFile> = {};
 
   for (const relativePath of currentRelativePaths) {
     const cached = updatedRelativePaths.has(relativePath)
@@ -275,7 +276,7 @@ async function writeProjectIndex(
     }
   }
 
-  const nextIndex: ProjectIndex = {
+  const nextIndex: V1ProjectIndex = {
     ...index,
     updatedAt: new Date().toISOString(),
     files,
@@ -290,7 +291,10 @@ async function writeProjectIndex(
   await rename(temporaryFile, location.file);
 }
 
-function hasStaleEntries(index: ProjectIndex, currentRelativePaths: ReadonlySet<string>): boolean {
+function hasStaleEntries(
+  index: V1ProjectIndex,
+  currentRelativePaths: ReadonlySet<string>,
+): boolean {
   return Object.keys(index.files).some((relativePath) => !currentRelativePaths.has(relativePath));
 }
 
