@@ -29,6 +29,9 @@ export interface SymbolRecord {
   signatureEnd?: number;
   parameters?: SymbolParameter[];
   returnType?: string;
+  comments?: string[];
+  commentStart?: number;
+  commentEnd?: number;
   snippet?: string;
 }
 

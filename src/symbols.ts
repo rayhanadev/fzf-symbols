@@ -26,6 +26,13 @@ interface LineColumn {
   column: number;
 }
 
+interface SourceLine {
+  line: number;
+  start: number;
+  end: number;
+  text: string;
+}
+
 interface CollectContext {
   file: string;
   source: string;
@@ -38,6 +45,9 @@ type SymbolMetadata = Pick<
   SymbolRecord,
   | "declarationEnd"
   | "declarationStart"
+  | "commentEnd"
+  | "commentStart"
+  | "comments"
   | "parameters"
   | "returnType"
   | "signature"
@@ -363,6 +373,7 @@ function createSymbolMetadata(node: AstNode | undefined, context: CollectContext
   const signatureEnd = findSignatureEnd(node, context.source);
 
   return {
+    ...createAdjacentCommentMetadata(node, context),
     declarationStart: node.start,
     declarationEnd: node.end,
     signature: createSignature(node, context.source, signatureEnd),
@@ -371,6 +382,111 @@ function createSymbolMetadata(node: AstNode | undefined, context: CollectContext
     parameters: createParameters(node, context.source),
     returnType: createReturnType(node, context.source),
     snippet: createSnippet(node, context),
+  };
+}
+
+function createAdjacentCommentMetadata(
+  node: AstNode,
+  context: CollectContext,
+): Pick<SymbolRecord, "commentEnd" | "commentStart" | "comments"> {
+  const start = node.start ?? 0;
+  const declarationLine = offsetToLineColumn(context.lineStarts, start).line;
+  const inlineComment = getInlineLeadingBlockComment(context, declarationLine, start);
+  const leadingComments = collectLeadingCommentLines(context, declarationLine);
+  const commentLines = inlineComment ? [...leadingComments, inlineComment] : leadingComments;
+
+  if (commentLines.length === 0) {
+    return {};
+  }
+
+  return {
+    comments: commentLines.map((line) => line.text.trim()),
+    commentStart: commentLines[0]?.start,
+    commentEnd: commentLines.at(-1)?.end,
+  };
+}
+
+function collectLeadingCommentLines(
+  context: CollectContext,
+  declarationLine: number,
+): SourceLine[] {
+  return collectLeadingCommentLinesBefore(context, declarationLine - 1);
+}
+
+function collectLeadingCommentLinesBefore(context: CollectContext, line: number): SourceLine[] {
+  if (line < 1) {
+    return [];
+  }
+
+  const sourceLine = getSourceLine(context, line);
+  const text = sourceLine.text.trim();
+
+  if (!text) {
+    return [];
+  }
+
+  if (isLineComment(text)) {
+    return [...collectLeadingCommentLinesBefore(context, line - 1), trimCommentLine(sourceLine)];
+  }
+
+  if (!endsBlockComment(text)) {
+    return [];
+  }
+
+  const blockComment = collectBlockCommentLines(context, line);
+
+  if (blockComment.length === 0) {
+    return [];
+  }
+
+  return [
+    ...collectLeadingCommentLinesBefore(context, (blockComment[0]?.line ?? line) - 1),
+    ...blockComment,
+  ];
+}
+
+function collectBlockCommentLines(context: CollectContext, endLine: number): SourceLine[] {
+  const commentLines: SourceLine[] = [];
+
+  for (let line = endLine; line >= 1; line -= 1) {
+    const sourceLine = getSourceLine(context, line);
+    commentLines.unshift(sourceLine);
+
+    if (startsBlockComment(sourceLine.text.trim())) {
+      return trimBlockCommentLines(commentLines);
+    }
+  }
+
+  return [];
+}
+
+function getInlineLeadingBlockComment(
+  context: CollectContext,
+  declarationLine: number,
+  declarationStart: number,
+): SourceLine | undefined {
+  const sourceLine = getSourceLine(context, declarationLine);
+  const commentEnd = declarationStart - sourceLine.start;
+  const prefix = sourceLine.text.slice(0, Math.max(0, commentEnd));
+  const commentStart = prefix.indexOf("/*");
+
+  if (commentStart === -1) {
+    return undefined;
+  }
+
+  const commentTokenEnd = prefix.indexOf("*/", commentStart);
+
+  if (commentTokenEnd === -1) {
+    return undefined;
+  }
+
+  const comment = prefix.slice(commentStart, commentTokenEnd + 2).trim();
+
+  return {
+    line: sourceLine.line,
+    start: sourceLine.start + commentStart,
+    end: sourceLine.start + commentTokenEnd + 2,
+    text: comment,
   };
 }
 
@@ -516,6 +632,77 @@ function sliceNode(node: AstNode, source: string): string {
 
 function normalizeSnippet(value: string): string {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function getSourceLine(context: CollectContext, line: number): SourceLine {
+  const start = context.lineStarts[line - 1] ?? 0;
+  const nextLineStart = context.lineStarts[line];
+  let end = nextLineStart ? nextLineStart - 1 : context.source.length;
+
+  if (context.source.charCodeAt(end - 1) === 13) {
+    end -= 1;
+  }
+
+  return {
+    line,
+    start,
+    end,
+    text: context.source.slice(start, end),
+  };
+}
+
+function trimCommentLine(line: SourceLine): SourceLine {
+  const leadingWhitespaceLength = line.text.search(/\S/);
+  const start = leadingWhitespaceLength === -1 ? line.start : line.start + leadingWhitespaceLength;
+
+  return {
+    ...line,
+    start,
+    end: trimTrailingWhitespaceEnd(line),
+  };
+}
+
+function trimBlockCommentLines(lines: readonly SourceLine[]): SourceLine[] {
+  if (lines.length === 0) {
+    return [];
+  }
+
+  return lines.map((line, index) => {
+    const isFirst = index === 0;
+    const isLast = index === lines.length - 1;
+
+    return {
+      ...line,
+      start: isFirst ? blockCommentStart(line) : line.start,
+      end: isLast ? blockCommentEnd(line) : line.end,
+    };
+  });
+}
+
+function blockCommentStart(line: SourceLine): number {
+  const offset = line.text.indexOf("/*");
+  return offset === -1 ? trimCommentLine(line).start : line.start + offset;
+}
+
+function blockCommentEnd(line: SourceLine): number {
+  const offset = line.text.lastIndexOf("*/");
+  return offset === -1 ? trimTrailingWhitespaceEnd(line) : line.start + offset + 2;
+}
+
+function trimTrailingWhitespaceEnd(line: SourceLine): number {
+  return line.start + line.text.replace(/\s+$/g, "").length;
+}
+
+function isLineComment(text: string): boolean {
+  return text.startsWith("//");
+}
+
+function startsBlockComment(text: string): boolean {
+  return text.startsWith("/*");
+}
+
+function endsBlockComment(text: string): boolean {
+  return text.endsWith("*/");
 }
 
 function walkAst(
