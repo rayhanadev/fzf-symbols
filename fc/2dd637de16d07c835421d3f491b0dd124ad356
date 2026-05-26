@@ -1,0 +1,36 @@
+src/highlight.ts
+  s_959f611f028c85::t_34a470bb5b45a1 1-4,176-180,184-190
+  s_959f611f028c85::t_780cdc95b01951 152-157,215-220,225-232,267,293
+  s_959f611f028c85::t_930ed6d6925aca 181-183
+  s_959f611f028c85::t_2a47c0e26beaa4 165
+  s_959f611f028c85::t_50939a5fc8b7cd 5-151,158-164,166-175,191-192,214,221-224,233-266,268-292,294-312
+  s_959f611f028c85::t_de42bf07a92548 193-213
+src/cli.ts
+  s_959f611f028c85::t_930ed6d6925aca 172-177
+  s_959f611f028c85::t_78d8823cd4abe7 6-8,10-11,170-171,178,222-227
+  s_959f611f028c85::t_d01e79e5d3fb9c 116,129,155,158-161,163
+  s_959f611f028c85::t_58c50436448e17 9
+README.md
+  s_959f611f028c85::t_6c5900f4f93934 66-67
+.changeset/sharp-badgers-glow.md
+  s_959f611f028c85::t_d213d3f114d79f 1-4
+  s_959f611f028c85::t_0e6fbab583ae11 5
+package.json
+  s_959f611f028c85::t_e1d25596cc9513 56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "fc2dd637de16d07c835421d3f491b0dd124ad356",
+  "prompts": {},
+  "sessions": {
+    "s_959f611f028c85": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "5f6fda64-2f54-404a-ad3f-ff3595938d09",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Rayhan Noufal Arayilakath <me@rayhanadev.com>"
+    }
+  }
+}
