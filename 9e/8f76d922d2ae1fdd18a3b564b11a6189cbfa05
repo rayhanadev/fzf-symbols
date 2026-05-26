@@ -1,0 +1,20 @@
+src/cache.ts
+  s_4fd2addc704c57::t_64c0d8791d9e6e 22
+  s_4fd2addc704c57::t_06a1f8ff121f62 156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9e8f76d922d2ae1fdd18a3b564b11a6189cbfa05",
+  "prompts": {},
+  "sessions": {
+    "s_4fd2addc704c57": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "b75bc54b-5742-40b3-bae1-75e7b6ed7765",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Rayhan Noufal Arayilakath <me@rayhanadev.com>"
+    }
+  }
+}
