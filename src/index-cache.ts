@@ -10,6 +10,7 @@ import type { ScanSymbolsOptions, SymbolRecord, SymbolScannerError } from "./typ
 const INDEX_SCHEMA_VERSION = 1;
 const EXTRACTOR_VERSION = "symbols-v1";
 const INDEX_FILENAME = "symbols.json";
+const MAX_PROJECT_SLUG_PREFIX_LENGTH = 96;
 const SYMBOL_KINDS = new Set<SymbolRecord["kind"]>([
   "class",
   "constant",
@@ -24,7 +25,12 @@ const SYMBOL_KINDS = new Set<SymbolRecord["kind"]>([
   "type",
   "variable",
 ]);
-const ERROR_KINDS = new Set<SymbolScannerError["kind"]>(["file-read", "parse", "walk"]);
+const ERROR_KINDS = new Set<SymbolScannerError["kind"]>([
+  "file-read",
+  "index-write",
+  "parse",
+  "walk",
+]);
 
 interface CachedFile {
   hash: string;
@@ -86,7 +92,7 @@ export async function scanSymbolsWithIndex(
 
     if (cached && isFresh(cached, state)) {
       replayCachedErrors(cached, options);
-      symbols.push(...filterSymbols(cached.symbols, allowedKinds));
+      appendSymbols(symbols, cached.symbols, allowedKinds);
       continue;
     }
 
@@ -99,15 +105,20 @@ export async function scanSymbolsWithIndex(
     index.files[relativePath] = indexed;
     updatedRelativePaths.add(relativePath);
     indexChanged = true;
-    symbols.push(...filterSymbols(indexed.symbols, allowedKinds));
+    appendSymbols(symbols, indexed.symbols, allowedKinds);
   }
 
   if (indexChanged || hasStaleEntries(index, currentRelativePaths)) {
     index.updatedAt = new Date().toISOString();
     try {
       await writeProjectIndex(location, index, currentRelativePaths, updatedRelativePaths);
-    } catch {
-      // The index is a cache; failed writes should not fail the scan.
+    } catch (cause) {
+      options.onError?.({
+        kind: "index-write",
+        file: location.file,
+        message: cause instanceof Error ? cause.message : "Failed to write symbol index",
+        cause,
+      });
     }
   }
 
@@ -268,15 +279,21 @@ function replayCachedErrors(cached: CachedFile, options: ScanSymbolsOptions): vo
   }
 }
 
-function filterSymbols(
+function appendSymbols(
+  target: SymbolRecord[],
   symbols: readonly SymbolRecord[],
   allowedKinds: Set<SymbolRecord["kind"]> | undefined,
-): SymbolRecord[] {
+): void {
   if (!allowedKinds) {
-    return [...symbols];
+    target.push(...symbols);
+    return;
   }
 
-  return symbols.filter((symbol) => allowedKinds.has(symbol.kind));
+  for (const symbol of symbols) {
+    if (allowedKinds.has(symbol.kind)) {
+      target.push(symbol);
+    }
+  }
 }
 
 function createContentHash(source: string): string {
@@ -327,48 +344,103 @@ function sanitizeCachedFiles(files: Record<string, unknown>): Record<string, Cac
   const sanitized: Record<string, CachedFile> = {};
 
   for (const [relativePath, value] of Object.entries(files)) {
-    if (isCachedFile(value)) {
-      sanitized[relativePath] = value;
+    const cached = sanitizeCachedFile(value);
+
+    if (cached) {
+      sanitized[relativePath] = cached;
     }
   }
 
   return sanitized;
 }
 
-function isCachedFile(value: unknown): value is CachedFile {
+function sanitizeCachedFile(value: unknown): CachedFile | undefined {
   if (!isRecord(value)) {
-    return false;
+    return undefined;
   }
 
-  return (
-    typeof value.hash === "string" &&
-    typeof value.mtimeMs === "number" &&
-    typeof value.size === "number" &&
-    Array.isArray(value.symbols) &&
-    value.symbols.every(isSymbolRecord) &&
-    (value.errors === undefined ||
-      (Array.isArray(value.errors) && value.errors.every(isCachedSymbolScannerError)))
-  );
+  const symbols = Array.isArray(value.symbols)
+    ? value.symbols.flatMap((symbol) => {
+        const sanitized = sanitizeSymbolRecord(symbol);
+        return sanitized ? [sanitized] : [];
+      })
+    : undefined;
+  const errors = Array.isArray(value.errors)
+    ? value.errors.flatMap((error) => {
+        const sanitized = sanitizeCachedSymbolScannerError(error);
+        return sanitized ? [sanitized] : [];
+      })
+    : undefined;
+
+  if (
+    typeof value.hash !== "string" ||
+    !isFiniteNumber(value.mtimeMs) ||
+    !isFiniteNumber(value.size) ||
+    !symbols
+  ) {
+    return undefined;
+  }
+
+  return {
+    hash: value.hash,
+    mtimeMs: value.mtimeMs,
+    size: value.size,
+    symbols,
+    ...(errors && errors.length > 0 ? { errors } : {}),
+  };
 }
 
-function isSymbolRecord(value: unknown): value is SymbolRecord {
-  return (
-    isRecord(value) &&
-    typeof value.name === "string" &&
-    isSymbolKind(value.kind) &&
-    typeof value.file === "string" &&
-    typeof value.start === "number" &&
-    typeof value.end === "number"
-  );
+function sanitizeSymbolRecord(value: unknown): SymbolRecord | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.name !== "string" ||
+    !isSymbolKind(value.kind) ||
+    typeof value.file !== "string" ||
+    !isFiniteNumber(value.start) ||
+    !isFiniteNumber(value.end)
+  ) {
+    return undefined;
+  }
+
+  return {
+    name: value.name,
+    kind: value.kind,
+    file: value.file,
+    start: value.start,
+    end: value.end,
+    ...pickOptionalNumber(value, "declarationStart"),
+    ...pickOptionalNumber(value, "declarationEnd"),
+    ...pickOptionalNumber(value, "line"),
+    ...pickOptionalNumber(value, "column"),
+    ...pickOptionalString(value, "container"),
+    ...pickOptionalBoolean(value, "exported"),
+    ...pickOptionalString(value, "signature"),
+    ...pickOptionalNumber(value, "signatureStart"),
+    ...pickOptionalNumber(value, "signatureEnd"),
+    ...pickOptionalParameters(value),
+    ...pickOptionalString(value, "returnType"),
+    ...pickOptionalStringArray(value, "comments"),
+    ...pickOptionalNumber(value, "commentStart"),
+    ...pickOptionalNumber(value, "commentEnd"),
+    ...pickOptionalString(value, "snippet"),
+  };
 }
 
-function isCachedSymbolScannerError(value: unknown): value is CachedSymbolScannerError {
-  return (
-    isRecord(value) &&
-    isErrorKind(value.kind) &&
-    typeof value.file === "string" &&
-    typeof value.message === "string"
-  );
+function sanitizeCachedSymbolScannerError(value: unknown): CachedSymbolScannerError | undefined {
+  if (
+    !isRecord(value) ||
+    !isErrorKind(value.kind) ||
+    typeof value.file !== "string" ||
+    typeof value.message !== "string"
+  ) {
+    return undefined;
+  }
+
+  return {
+    kind: value.kind,
+    file: value.file,
+    message: value.message,
+  };
 }
 
 function isSymbolKind(value: unknown): value is SymbolRecord["kind"] {
@@ -383,10 +455,79 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function pickOptionalNumber<Key extends string>(
+  value: Record<string, unknown>,
+  key: Key,
+): Partial<Record<Key, number>> {
+  return isFiniteNumber(value[key]) ? ({ [key]: value[key] } as Partial<Record<Key, number>>) : {};
+}
+
+function pickOptionalString<Key extends string>(
+  value: Record<string, unknown>,
+  key: Key,
+): Partial<Record<Key, string>> {
+  return typeof value[key] === "string"
+    ? ({ [key]: value[key] } as Partial<Record<Key, string>>)
+    : {};
+}
+
+function pickOptionalBoolean<Key extends string>(
+  value: Record<string, unknown>,
+  key: Key,
+): Partial<Record<Key, boolean>> {
+  return typeof value[key] === "boolean"
+    ? ({ [key]: value[key] } as Partial<Record<Key, boolean>>)
+    : {};
+}
+
+function pickOptionalStringArray<Key extends string>(
+  value: Record<string, unknown>,
+  key: Key,
+): Partial<Record<Key, string[]>> {
+  const candidate = value[key];
+
+  return Array.isArray(candidate) && candidate.every((item) => typeof item === "string")
+    ? ({ [key]: candidate } as Partial<Record<Key, string[]>>)
+    : {};
+}
+
+function pickOptionalParameters(value: Record<string, unknown>): Partial<SymbolRecord> {
+  const candidate = value.parameters;
+
+  if (!Array.isArray(candidate)) {
+    return {};
+  }
+
+  const parameters = candidate.flatMap((parameter) => {
+    if (!isRecord(parameter) || typeof parameter.name !== "string") {
+      return [];
+    }
+
+    return [
+      {
+        name: parameter.name,
+        ...pickOptionalString(parameter, "type"),
+        ...pickOptionalBoolean(parameter, "optional"),
+        ...pickOptionalBoolean(parameter, "rest"),
+        ...pickOptionalString(parameter, "default"),
+      },
+    ];
+  });
+
+  return { parameters };
+}
+
 function createProjectSlug(projectRoot: string): string {
   const resolvedProjectRoot = path.resolve(projectRoot);
   const normalized = resolvedProjectRoot.split(path.sep).filter(Boolean).join("-");
-  const safe = normalized.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-");
+  const safe = normalized
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, MAX_PROJECT_SLUG_PREFIX_LENGTH);
   const pathHash = createHash("sha256").update(resolvedProjectRoot).digest("hex").slice(0, 8);
 
   return `${safe || "root"}-${pathHash}`;

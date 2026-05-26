@@ -40,7 +40,7 @@ export interface SymbolSearchResult extends SymbolRecord {
   matches: number[];
 }
 
-export type SymbolScannerErrorKind = "file-read" | "parse" | "walk";
+export type SymbolScannerErrorKind = "file-read" | "index-write" | "parse" | "walk";
 
 export interface SymbolScannerError {
   kind: SymbolScannerErrorKind;
