@@ -3,6 +3,8 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
+import { type as arkType } from "arktype";
+
 import { SymbolFileReadError, SymbolIndexWriteError, SymbolScanAbortedError } from "./errors.ts";
 import { extractSymbolsFromSource } from "./symbols.ts";
 
@@ -12,7 +14,7 @@ const INDEX_SCHEMA_VERSION = 1;
 const EXTRACTOR_VERSION = "symbols-v1";
 const INDEX_FILENAME = "symbols.json";
 const MAX_PROJECT_SLUG_PREFIX_LENGTH = 96;
-const SYMBOL_KINDS = new Set<SymbolRecord["kind"]>([
+const SymbolKindSchema = arkType.enumerated(
   "class",
   "constant",
   "enum",
@@ -25,7 +27,51 @@ const SYMBOL_KINDS = new Set<SymbolRecord["kind"]>([
   "property",
   "type",
   "variable",
-]);
+);
+const SymbolParameterSchema = arkType({
+  name: "string",
+  "type?": "string",
+  "optional?": "boolean",
+  "rest?": "boolean",
+  "default?": "string",
+});
+const SymbolRecordSchema = arkType({
+  name: "string",
+  kind: SymbolKindSchema,
+  file: "string",
+  start: "number",
+  end: "number",
+  "declarationStart?": "number",
+  "declarationEnd?": "number",
+  "line?": "number",
+  "column?": "number",
+  "container?": "string",
+  "exported?": "boolean",
+  "signature?": "string",
+  "signatureStart?": "number",
+  "signatureEnd?": "number",
+  "parameters?": SymbolParameterSchema.array(),
+  "returnType?": "string",
+  "comments?": "string[]",
+  "commentStart?": "number",
+  "commentEnd?": "number",
+  "snippet?": "string",
+});
+const CachedFileSchema = arkType({
+  hash: "string",
+  mtimeMs: "number",
+  size: "number",
+  symbols: SymbolRecordSchema.array(),
+});
+const ProjectIndexSchema = arkType({
+  schemaVersion: "number",
+  extractorVersion: "string",
+  projectRoot: "string",
+  updatedAt: "string",
+  files: {
+    "[string]": CachedFileSchema,
+  },
+});
 
 interface CachedFile {
   hash: string;
@@ -145,21 +191,20 @@ function getProjectIndexLocation(projectRoot: string): ProjectIndexLocation {
 async function readProjectIndex(file: string, projectRoot: string): Promise<ProjectIndex> {
   try {
     const raw = await readFile(file, "utf8");
-    const parsed = JSON.parse(raw) as Partial<ProjectIndex>;
+    const parsed = ProjectIndexSchema(JSON.parse(raw));
 
     if (
+      !(parsed instanceof arkType.errors) &&
       parsed.schemaVersion === INDEX_SCHEMA_VERSION &&
       parsed.extractorVersion === EXTRACTOR_VERSION &&
-      parsed.projectRoot === projectRoot &&
-      isRecord(parsed.files)
+      parsed.projectRoot === projectRoot
     ) {
       return {
         schemaVersion: INDEX_SCHEMA_VERSION,
         extractorVersion: EXTRACTOR_VERSION,
         projectRoot,
-        updatedAt:
-          typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
-        files: sanitizeCachedFiles(parsed.files),
+        updatedAt: parsed.updatedAt,
+        files: parsed.files,
       };
     }
   } catch {
@@ -298,159 +343,6 @@ async function writeProjectIndex(
 
 function hasStaleEntries(index: ProjectIndex, currentRelativePaths: ReadonlySet<string>): boolean {
   return Object.keys(index.files).some((relativePath) => !currentRelativePaths.has(relativePath));
-}
-
-function sanitizeCachedFiles(files: Record<string, unknown>): Record<string, CachedFile> {
-  const sanitized: Record<string, CachedFile> = {};
-
-  for (const [relativePath, value] of Object.entries(files)) {
-    const cached = sanitizeCachedFile(value);
-
-    if (cached) {
-      sanitized[relativePath] = cached;
-    }
-  }
-
-  return sanitized;
-}
-
-function sanitizeCachedFile(value: unknown): CachedFile | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  const symbols = Array.isArray(value.symbols)
-    ? value.symbols.flatMap((symbol) => {
-        const sanitized = sanitizeSymbolRecord(symbol);
-        return sanitized ? [sanitized] : [];
-      })
-    : undefined;
-
-  if (
-    typeof value.hash !== "string" ||
-    !isFiniteNumber(value.mtimeMs) ||
-    !isFiniteNumber(value.size) ||
-    !symbols
-  ) {
-    return undefined;
-  }
-
-  return {
-    hash: value.hash,
-    mtimeMs: value.mtimeMs,
-    size: value.size,
-    symbols,
-  };
-}
-
-function sanitizeSymbolRecord(value: unknown): SymbolRecord | undefined {
-  if (
-    !isRecord(value) ||
-    typeof value.name !== "string" ||
-    !isSymbolKind(value.kind) ||
-    typeof value.file !== "string" ||
-    !isFiniteNumber(value.start) ||
-    !isFiniteNumber(value.end)
-  ) {
-    return undefined;
-  }
-
-  return {
-    name: value.name,
-    kind: value.kind,
-    file: value.file,
-    start: value.start,
-    end: value.end,
-    ...pickOptionalNumber(value, "declarationStart"),
-    ...pickOptionalNumber(value, "declarationEnd"),
-    ...pickOptionalNumber(value, "line"),
-    ...pickOptionalNumber(value, "column"),
-    ...pickOptionalString(value, "container"),
-    ...pickOptionalBoolean(value, "exported"),
-    ...pickOptionalString(value, "signature"),
-    ...pickOptionalNumber(value, "signatureStart"),
-    ...pickOptionalNumber(value, "signatureEnd"),
-    ...pickOptionalParameters(value),
-    ...pickOptionalString(value, "returnType"),
-    ...pickOptionalStringArray(value, "comments"),
-    ...pickOptionalNumber(value, "commentStart"),
-    ...pickOptionalNumber(value, "commentEnd"),
-    ...pickOptionalString(value, "snippet"),
-  };
-}
-
-function isSymbolKind(value: unknown): value is SymbolRecord["kind"] {
-  return typeof value === "string" && SYMBOL_KINDS.has(value as SymbolRecord["kind"]);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function pickOptionalNumber<Key extends string>(
-  value: Record<string, unknown>,
-  key: Key,
-): Partial<Record<Key, number>> {
-  return isFiniteNumber(value[key]) ? ({ [key]: value[key] } as Partial<Record<Key, number>>) : {};
-}
-
-function pickOptionalString<Key extends string>(
-  value: Record<string, unknown>,
-  key: Key,
-): Partial<Record<Key, string>> {
-  return typeof value[key] === "string"
-    ? ({ [key]: value[key] } as Partial<Record<Key, string>>)
-    : {};
-}
-
-function pickOptionalBoolean<Key extends string>(
-  value: Record<string, unknown>,
-  key: Key,
-): Partial<Record<Key, boolean>> {
-  return typeof value[key] === "boolean"
-    ? ({ [key]: value[key] } as Partial<Record<Key, boolean>>)
-    : {};
-}
-
-function pickOptionalStringArray<Key extends string>(
-  value: Record<string, unknown>,
-  key: Key,
-): Partial<Record<Key, string[]>> {
-  const candidate = value[key];
-
-  return Array.isArray(candidate) && candidate.every((item) => typeof item === "string")
-    ? ({ [key]: candidate } as Partial<Record<Key, string[]>>)
-    : {};
-}
-
-function pickOptionalParameters(value: Record<string, unknown>): Partial<SymbolRecord> {
-  const candidate = value.parameters;
-
-  if (!Array.isArray(candidate)) {
-    return {};
-  }
-
-  const parameters = candidate.flatMap((parameter) => {
-    if (!isRecord(parameter) || typeof parameter.name !== "string") {
-      return [];
-    }
-
-    return [
-      {
-        name: parameter.name,
-        ...pickOptionalString(parameter, "type"),
-        ...pickOptionalBoolean(parameter, "optional"),
-        ...pickOptionalBoolean(parameter, "rest"),
-        ...pickOptionalString(parameter, "default"),
-      },
-    ];
-  });
-
-  return { parameters };
 }
 
 function createProjectSlug(projectRoot: string): string {
