@@ -1,6 +1,6 @@
 import { discoverFiles } from "./files.ts";
 import { rankSymbols } from "./fuzzy.ts";
-import { scanSymbolsWithIndex } from "./index-cache.ts";
+import { scanSymbolsWithIndex } from "./cache.ts";
 
 import type {
   ScanSymbolsOptions,

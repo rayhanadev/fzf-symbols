@@ -8,7 +8,7 @@ export {
   TrufflerError,
 } from "./errors.ts";
 export { rankSymbols, scoreFuzzy } from "./fuzzy.ts";
-export { getProjectIndexDirectory } from "./index-cache.ts";
+export { getProjectIndexDirectory } from "./cache.ts";
 export { scanSymbols, searchSymbols } from "./scanner.ts";
 export { extractSymbolsFromSource } from "./symbols.ts";
 
