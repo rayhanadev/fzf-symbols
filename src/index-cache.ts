@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 import { SymbolFileReadError, SymbolIndexWriteError, SymbolScanAbortedError } from "./errors.ts";
@@ -104,7 +104,21 @@ export async function scanSymbolsWithIndex(
 }
 
 export function getProjectIndexDirectory(projectRoot: string): string {
-  return path.join(homedir(), ".truffler", "projects", createProjectSlug(projectRoot));
+  return path.join(getTrufflerConfigRoot(), "projects", createProjectSlug(projectRoot));
+}
+
+function getTrufflerConfigRoot(): string {
+  try {
+    const home = homedir();
+
+    if (home) {
+      return path.join(home, ".truffler");
+    }
+  } catch {
+    // Restricted runtimes can make home directory resolution unavailable.
+  }
+
+  return path.join(tmpdir(), ".truffler");
 }
 
 async function getProjectRoot(options: ScanSymbolsOptions): Promise<string> {
@@ -275,7 +289,7 @@ async function writeProjectIndex(
 
   const temporaryFile = path.join(
     location.directory,
-    `${INDEX_FILENAME}.${process.pid}.${Date.now()}.tmp`,
+    `${INDEX_FILENAME}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`,
   );
 
   await writeFile(temporaryFile, `${JSON.stringify(nextIndex)}\n`, "utf8");
