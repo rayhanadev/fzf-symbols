@@ -1,0 +1,24 @@
+README.md
+  s_45d9c79e2869d1::t_24372527044205 19-20,22,24-25,27-28,30-31,33-34,42
+  s_45d9c79e2869d1::t_2670475fe79280 21,23,26,29,32,35-41
+.gitignore
+  s_45d9c79e2869d1::t_de3df71855ee4a 30-32
+skills/fzfsym-similar-functions/SKILL.md
+  s_45d9c79e2869d1::t_e2107be677e078 1-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "5463a0629ae5101d5f31643583f8b888e29d7e19",
+  "prompts": {},
+  "sessions": {
+    "s_45d9c79e2869d1": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "99986bab-9cfa-4f10-9d1b-a44cb9bf3339",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Rayhan Noufal Arayilakath <me@rayhanadev.com>"
+    }
+  }
+}
